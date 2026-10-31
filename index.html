@@ -92,6 +92,21 @@ details summary{cursor:pointer;color:var(--muted);padding:10px 0;font-weight:600
 .loading{color:var(--muted);text-align:center;padding:40px 0}
 .history-item{padding:10px 0;border-bottom:1px solid var(--border)}
 .history-item:last-child{border-bottom:0}
+:root{--l0:#6b6b75;--l1:#e3b341;--l2:#3fb96b;--l3:#4c9aff}
+.dots{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.dot{font-size:12px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid transparent}
+.dot.pas-commence{background:rgba(107,107,117,.2);color:#b8b8c2;border-color:#45454e}
+.dot.apprentissage{background:rgba(227,179,65,.18);color:var(--l1)}
+.dot.gere{background:rgba(63,185,107,.18);color:var(--l2)}
+.dot.maitrise{background:rgba(76,154,255,.2);color:var(--l3)}
+.levels{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.levels button{min-height:48px;font-size:15px;background:var(--bg)}
+.levels button.on.pas-commence{background:var(--l0);border-color:var(--l0);color:#fff;font-weight:700}
+.levels button.on.apprentissage{background:var(--l1);border-color:var(--l1);color:#2a1f02;font-weight:700}
+.levels button.on.gere{background:var(--l2);border-color:var(--l2);color:#06210f;font-weight:700}
+.levels button.on.maitrise{background:var(--l3);border-color:var(--l3);color:#04172f;font-weight:700}
+.prog-row{padding:10px 0;border-bottom:1px solid var(--border)}
+.prog-row:last-child{border-bottom:0}
 </style>
 </head>
 <body>
@@ -121,6 +136,33 @@ const VOTES = [
 ];
 const VOTE_BY_KEY = Object.fromEntries(VOTES.map(v => [v.key, v]));
 const SONG_STATUS = { 'a-apprendre': 'À apprendre', 'en-cours': 'En cours', 'pret': 'Prêt' };
+const LEVELS = [
+  { key: 'pas-commence', label: 'Pas commencé', icon: '⚪' },
+  { key: 'apprentissage', label: 'En apprentissage', icon: '🟡' },
+  { key: 'gere', label: 'Je gère', icon: '🟢' },
+  { key: 'maitrise', label: 'Maîtrisé', icon: '🔵' },
+];
+const LEVEL_RANK = Object.fromEntries(LEVELS.map((l, i) => [l.key, i]));
+const LEVEL_BY_KEY = Object.fromEntries(LEVELS.map(l => [l.key, l]));
+
+// Niveau d'un membre sur un morceau (pas d'entrée = pas commencé)
+function levelOf(progress, member) {
+  return (progress || []).find(p => p.member === member)?.level || 'pas-commence';
+}
+// Statut calculé : prêt si tout le monde gère au moins, en cours si quelqu'un a commencé
+function songStatus(progress) {
+  const ranks = state.members.map(m => LEVEL_RANK[levelOf(progress, m)]);
+  if (ranks.length && ranks.every(r => r >= LEVEL_RANK.gere)) return 'pret';
+  if (ranks.some(r => r >= LEVEL_RANK.apprentissage)) return 'en-cours';
+  return 'a-apprendre';
+}
+// Pastilles colorées, une par membre
+function dotsHtml(progress) {
+  return `<div class="dots">${state.members.map(m => {
+    const l = levelOf(progress, m);
+    return `<span class="dot ${l}" title="${esc(m)} : ${LEVEL_BY_KEY[l].label}">${esc(m.slice(0, 3))}</span>`;
+  }).join('')}</div>`;
+}
 
 const state = { band: 'Mon groupe', members: [], me: null };
 const $app = document.getElementById('app');
@@ -253,7 +295,7 @@ async function viewRehearsals() {
 // ===== Détail d'une répète =====
 async function viewRehearsal(id) {
   const [r, songs] = await Promise.all([
-    q(db.from('rehearsals').select('*, availability(member,status), setlist_items(id,position,note,song_id,songs(title,status))').eq('id', id).maybeSingle()),
+    q(db.from('rehearsals').select('*, availability(member,status), setlist_items(id,position,note,song_id,songs(title,song_progress(member,level)))').eq('id', id).maybeSingle()),
     q(db.from('songs').select('id,title').order('title')),
   ]);
   if (!r) { $app.innerHTML = `<div class="empty">Cette répète n'existe plus.<br><br><a class="btn" href="#/repetes">Retour</a></div>`; return; }
@@ -303,6 +345,7 @@ async function viewRehearsal(id) {
           <button class="btn-sm btn-icon" data-act="move" data-id="${it.id}" data-dir="1" ${i === items.length - 1 ? 'disabled' : ''} aria-label="Descendre">↓</button>
           <button class="btn-sm btn-icon btn-ghost" data-act="unset" data-id="${it.id}" aria-label="Retirer">✕</button>
         </div>
+        ${it.songs ? dotsHtml(it.songs.song_progress) : ''}
         <textarea data-change="itemnote" data-id="${it.id}" placeholder="Note sur ce morceau pour cette répète (enregistré automatiquement)">${esc(it.note)}</textarea>
       </div>`).join('') : `<div class="empty">Pas encore de morceaux prévus.</div>`}
     ${available.length ? `
@@ -326,15 +369,14 @@ async function viewRehearsal(id) {
 
 // ===== Liste des morceaux =====
 async function viewSongs() {
-  const songs = await q(db.from('songs').select('id,title,status').order('title'));
+  const songs = await q(db.from('songs').select('id,title,song_progress(member,level)').order('title'));
+  songs.forEach(s => { s.status = songStatus(s.song_progress); });
   const groups = ['en-cours', 'a-apprendre', 'pret'];
   $app.innerHTML = `
     <div class="row between"><h2>Morceaux</h2>
       <button class="btn-accent" data-act="toggle" data-target="newSong">+ Nouveau</button></div>
     <form id="newSong" class="card hidden" data-form="newSong">
       <label style="margin-top:0">Titre</label><input type="text" name="title" required placeholder="Titre du morceau">
-      <label>Statut</label>
-      <select name="status">${Object.entries(SONG_STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
       <div class="row" style="margin-top:14px">
         <button type="button" class="btn-ghost grow" data-act="toggle" data-target="newSong">Annuler</button>
         <button type="submit" class="btn-accent grow">Ajouter</button>
@@ -345,8 +387,9 @@ async function viewSongs() {
       const list = songs.filter(s => s.status === g);
       if (!list.length) return '';
       return `<h3>${SONG_STATUS[g]} (${list.length})</h3>` + list.map(s => `
-        <a class="card row between song-link" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
-          <span class="title grow" style="font-size:17px">${esc(s.title)}</span><span class="muted">›</span>
+        <a class="card song-link" style="display:block" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
+          <div class="row between"><span class="title grow" style="font-size:17px">${esc(s.title)}</span><span class="muted">›</span></div>
+          ${dotsHtml(s.song_progress)}
         </a>`).join('');
     }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec « + Nouveau ».</div>`}
   `;
@@ -371,21 +414,44 @@ function fieldBlock(song, field, label, cls) {
 }
 async function viewSong(id) {
   const [song, hist] = await Promise.all([
-    q(db.from('songs').select('*').eq('id', id).maybeSingle()),
+    q(db.from('songs').select('*, song_progress(member,level,note)').eq('id', id).maybeSingle()),
     q(db.from('setlist_items').select('note, rehearsal_id, rehearsals(date)').eq('song_id', id)),
   ]);
   if (!song) { $app.innerHTML = `<div class="empty">Ce morceau n'existe plus.<br><br><a class="btn" href="#/morceaux">Retour</a></div>`; return; }
   const history = hist.filter(h => h.rehearsals).sort((a, b) => b.rehearsals.date.localeCompare(a.rehearsals.date));
+  const prog = song.song_progress || [];
+  const myLevel = levelOf(prog, state.me);
+  const myNote = prog.find(p => p.member === state.me)?.note || '';
+  const status = songStatus(prog);
   $app.innerHTML = `
     <a class="back" href="#/morceaux">‹ Morceaux</a>
     <div class="row between" style="align-items:flex-start">
       <h2 class="grow" id="songTitle">${esc(song.title)}</h2>
       <button class="btn-sm" data-act="rename" data-id="${song.id}">Renommer</button>
     </div>
-    <label style="margin-top:0">Statut</label>
-    <select data-change="songstatus" data-id="${song.id}">
-      ${Object.entries(SONG_STATUS).map(([k, v]) => `<option value="${k}" ${song.status === k ? 'selected' : ''}>${v}</option>`).join('')}
-    </select>
+    <span class="chip ${status}">${SONG_STATUS[status]}</span>
+    <span class="muted small" style="margin-left:6px">calculé selon le niveau de chacun</span>
+
+    <h3>Mon niveau</h3>
+    <div class="levels">${LEVELS.map(l =>
+      `<button class="${l.key} ${myLevel === l.key ? 'on' : ''}" data-act="level" data-id="${song.id}" data-l="${l.key}">${l.icon} ${l.label}</button>`
+    ).join('')}</div>
+    <textarea data-change="mynote" data-id="${song.id}" style="min-height:60px;margin-top:10px;font-size:15px"
+      placeholder="Ma note perso (ex. je bloque sur le solo), enregistrée automatiquement">${esc(myNote)}</textarea>
+
+    <h3>Où en est le groupe</h3>
+    <div class="card">
+      ${state.members.map(m => {
+        const p = prog.find(x => x.member === m);
+        const l = LEVEL_BY_KEY[levelOf(prog, m)];
+        return `<div class="prog-row">
+          <div class="row between"><span>${esc(m)}${m === state.me ? ' <span class="muted small">(toi)</span>' : ''}</span>
+            <span class="dot ${l.key}">${l.icon} ${l.label}</span></div>
+          ${p?.note ? `<div class="muted small" style="margin-top:4px">${esc(p.note)}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>
+
     ${fieldBlock(song, 'tabs', 'Tabs', 'mono')}
     ${fieldBlock(song, 'lyrics', 'Paroles', 'lyrics')}
     ${fieldBlock(song, 'notes', 'Notes', 'lyrics')}
@@ -464,6 +530,12 @@ const actions = {
     await Promise.all(items.map((it, idx) => it.position === idx ? null : q(db.from('setlist_items').update({ position: idx }).eq('id', it.id))));
     route();
   },
+  async level(el) {
+    await q(db.from('song_progress').upsert(
+      { song_id: el.dataset.id, member: state.me, level: el.dataset.l, updated_at: new Date().toISOString() },
+      { onConflict: 'song_id,member' }));
+    route();
+  },
   async savenotes(el) {
     await q(db.from('rehearsals').update({
       done_notes: document.getElementById('doneNotes').value,
@@ -537,7 +609,7 @@ document.addEventListener('submit', async e => {
       await q(db.from('rehearsals').update({ date: d.date, time: d.time, place: d.place.trim() }).eq('id', form.dataset.id));
       route();
     } else if (form.dataset.form === 'newSong') {
-      const s = await q(db.from('songs').insert({ title: d.title.trim(), status: d.status }).select('id').single());
+      const s = await q(db.from('songs').insert({ title: d.title.trim() }).select('id').single());
       go('#/morceau/' + s.id);
     } else if (form.dataset.form === 'newMember') {
       const name = d.name.trim();
@@ -554,9 +626,11 @@ document.addEventListener('change', async e => {
     if (el.dataset.change === 'itemnote') {
       await q(db.from('setlist_items').update({ note: el.value }).eq('id', el.dataset.id));
       toast('Note enregistrée');
-    } else if (el.dataset.change === 'songstatus') {
-      await q(db.from('songs').update({ status: el.value }).eq('id', el.dataset.id));
-      toast('Statut mis à jour');
+    } else if (el.dataset.change === 'mynote') {
+      await q(db.from('song_progress').upsert(
+        { song_id: el.dataset.id, member: state.me, note: el.value, updated_at: new Date().toISOString() },
+        { onConflict: 'song_id,member' }));
+      toast('Note enregistrée');
     }
   } catch (err) {}
 });
