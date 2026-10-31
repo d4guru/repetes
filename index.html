@@ -139,6 +139,15 @@ label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 .legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
 #calSwipe{touch-action:pan-y;overflow:hidden}
 #rehSwipe{touch-action:pan-y}
+.thumb{flex:none;border-radius:8px;object-fit:cover;background:var(--surface2)}
+.thumb.ph{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700;font-size:16px;border:1px solid var(--border)}
+.cover-big{display:block;width:100%;max-width:320px;aspect-ratio:1;object-fit:cover;border-radius:14px;margin:4px auto 10px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.cover-add{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:320px;aspect-ratio:2.4;margin:4px auto 10px;
+  border:2px dashed var(--border);border-radius:14px;color:var(--muted);cursor:pointer;font-size:16px}
+.file-hidden{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+audio{width:100%;margin-top:8px;color-scheme:dark}
+.audio-item{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px}
+input[type=file]{padding:9px;font-size:15px}
 body{overflow-x:clip}
 @keyframes calFromRight{from{transform:translateX(40%);opacity:0}to{transform:none;opacity:1}}
 @keyframes calFromLeft{from{transform:translateX(-40%);opacity:0}to{transform:none;opacity:1}}
@@ -189,6 +198,53 @@ const LEVELS = [
 ];
 const LEVEL_RANK = Object.fromEntries(LEVELS.map((l, i) => [l.key, i]));
 const LEVEL_BY_KEY = Object.fromEntries(LEVELS.map(l => [l.key, l]));
+
+// ===== Stockage des fichiers (audio, pochettes) =====
+const MEDIA = 'media';
+const MAX_FILE = 50 * 1024 * 1024; // 50 Mo, limite de l'offre gratuite
+const urlCache = new Map();
+
+// Liens temporaires vers les fichiers privés (gardés en mémoire pour éviter de recharger)
+async function signedUrls(paths) {
+  const need = [...new Set(paths.filter(p => p && !urlCache.has(p)))];
+  if (need.length) {
+    const { data, error } = await db.storage.from(MEDIA).createSignedUrls(need, 60 * 60 * 24 * 7);
+    if (!error) (data || []).forEach(d => { if (d.signedUrl) urlCache.set(d.path, d.signedUrl); });
+  }
+  return p => (p && urlCache.get(p)) || '';
+}
+function coverThumb(title, url, size = 44) {
+  return url
+    ? `<img class="thumb" src="${esc(url)}" alt="" loading="lazy" style="width:${size}px;height:${size}px">`
+    : `<span class="thumb ph" style="width:${size}px;height:${size}px">${esc((title || '?').trim().charAt(0).toUpperCase())}</span>`;
+}
+// Réduit une image à max×max pixels en JPEG avant l'envoi
+function resizeImage(file, max) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? resolve(b) : reject(new Error('Image illisible')), 'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible')); };
+    img.src = url;
+  });
+}
+function audioType(file) {
+  if (file.type) return file.type;
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  return { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac' }[ext] || 'application/octet-stream';
+}
+function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(b / 1024)) + ' Ko'; }
+// Un seul enregistrement lu à la fois
+document.addEventListener('play', e => {
+  document.querySelectorAll('audio').forEach(a => { if (a !== e.target) a.pause(); });
+}, true);
 
 // ===== Jours de la semaine et couleurs (index = getDay(), 0 = dimanche) =====
 const DAYS = [
@@ -536,7 +592,7 @@ document.addEventListener('touchend', e => {
 // ===== Détail d'une répète =====
 async function viewRehearsal(id) {
   const [r, songs, allReh] = await Promise.all([
-    q(db.from('rehearsals').select('*, availability(member,status), setlist_items(id,position,note,song_id,songs(title,song_progress(member,level)))').eq('id', id).maybeSingle()),
+    q(db.from('rehearsals').select('*, availability(member,status), setlist_items(id,position,note,song_id,songs(title,cover_path,song_progress(member,level)))').eq('id', id).maybeSingle()),
     q(db.from('songs').select('id,title').order('title')),
     q(db.from('rehearsals').select('id,date,time').order('date').order('time').order('created_at')),
   ]);
@@ -547,6 +603,7 @@ async function viewRehearsal(id) {
   const available = songs.filter(s => !inSet.has(s.id))
     .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
   state.availableSongs = available.map(s => s.id);
+  const urlOf = await signedUrls(items.map(it => it.songs?.cover_path));
   const nextPos = items.length ? items[items.length - 1].position + 1 : 0;
   const mine = av.find(a => a.member === state.me);
   const idx = allReh.findIndex(x => x.id === r.id);
@@ -595,6 +652,7 @@ async function viewRehearsal(id) {
         <div class="row">
           <span class="drag-handle" aria-label="Déplacer">☰</span>
           <span class="set-num">${i + 1}</span>
+          ${coverThumb(it.songs?.title, urlOf(it.songs?.cover_path), 36)}
           <a class="grow title" style="font-size:16px" href="#/morceau/${it.song_id}">${esc(it.songs?.title || '(morceau supprimé)')}</a>
           <button class="btn-sm btn-icon btn-ghost" data-act="unset" data-id="${it.id}" aria-label="Retirer">✕</button>
         </div>
@@ -664,7 +722,8 @@ function initSetlistSort() {
 
 // ===== Liste des morceaux =====
 async function viewSongs() {
-  const songs = await q(db.from('songs').select('id,title,song_progress(member,level)').order('title'));
+  const songs = await q(db.from('songs').select('id,title,cover_path,song_progress(member,level)').order('title'));
+  const urlOf = await signedUrls(songs.map(s => s.cover_path));
   songs.forEach(s => { s.status = songStatus(s.song_progress); });
   const groups = ['en-cours', 'a-apprendre', 'pret'];
   $app.innerHTML = `
@@ -682,9 +741,12 @@ async function viewSongs() {
       const list = songs.filter(s => s.status === g);
       if (!list.length) return '';
       return `<h3>${SONG_STATUS[g]} (${list.length})</h3>` + list.map(s => `
-        <a class="card song-link" style="display:block" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
-          <div class="row between"><span class="title grow" style="font-size:17px">${esc(s.title)}</span><span class="muted">›</span></div>
-          ${dotsHtml(s.song_progress)}
+        <a class="card song-link row" style="gap:12px" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
+          ${coverThumb(s.title, urlOf(s.cover_path), 52)}
+          <div class="grow">
+            <div class="row between"><span class="title grow" style="font-size:17px">${esc(s.title)}</span><span class="muted">›</span></div>
+            ${dotsHtml(s.song_progress)}
+          </div>
         </a>`).join('');
     }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec le bouton + en bas à droite.</div>`}
   `;
@@ -709,10 +771,13 @@ function fieldBlock(song, field, label, cls) {
 }
 async function viewSong(id) {
   const [song, hist] = await Promise.all([
-    q(db.from('songs').select('*, song_progress(member,level,note)').eq('id', id).maybeSingle()),
+    q(db.from('songs').select('*, song_progress(member,level,note), song_audio(id,title,path,size,added_by,created_at)').eq('id', id).maybeSingle()),
     q(db.from('setlist_items').select('note, rehearsal_id, rehearsals(date)').eq('song_id', id)),
   ]);
   if (!song) { $app.innerHTML = `<div class="empty">Ce morceau n'existe plus.<br><br><a class="btn" href="#/morceaux">Retour</a></div>`; return; }
+  const audios = (song.song_audio || []).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  const urlOf = await signedUrls([song.cover_path, ...audios.map(a => a.path)]);
+  const coverUrl = urlOf(song.cover_path);
   const history = hist.filter(h => h.rehearsals).sort((a, b) => b.rehearsals.date.localeCompare(a.rehearsals.date));
   const prog = song.song_progress || [];
   const myLevel = levelOf(prog, state.me);
@@ -724,8 +789,38 @@ async function viewSong(id) {
       <h2 class="grow" id="songTitle">${esc(song.title)}</h2>
       <button class="btn-sm" data-act="rename" data-id="${song.id}">Renommer</button>
     </div>
+
+    <input type="file" accept="image/*" id="coverInput" class="file-hidden" data-change="cover" data-id="${song.id}" data-old="${esc(song.cover_path || '')}">
+    ${coverUrl ? `
+      <img class="cover-big" src="${esc(coverUrl)}" alt="Pochette">
+      <div class="row" style="justify-content:center;margin-bottom:14px">
+        <label for="coverInput" class="btn btn-sm" style="line-height:28px">Changer la pochette</label>
+        <button class="btn-sm btn-ghost" data-act="delcover" data-id="${song.id}" data-path="${esc(song.cover_path)}">Retirer</button>
+      </div>`
+      : `<label for="coverInput" class="cover-add">＋ Ajouter une pochette</label>`}
+
     <span class="chip ${status}">${SONG_STATUS[status]}</span>
     <span class="muted small" style="margin-left:6px">calculé selon le niveau de chacun</span>
+
+    <h3>Enregistrements (${audios.length})</h3>
+    ${audios.map(a => `
+      <div class="audio-item">
+        <div class="row between" style="align-items:flex-start">
+          <div class="grow">
+            <div style="font-weight:600">${esc(a.title || 'Sans titre')}</div>
+            <div class="muted small">${esc([a.added_by, fmtDate(String(a.created_at).slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }), a.size ? fmtSize(a.size) : ''].filter(Boolean).join(' · '))}</div>
+          </div>
+          <button class="btn-sm btn-icon btn-ghost" data-act="delaudio" data-id="${a.id}" data-path="${esc(a.path)}" aria-label="Supprimer">✕</button>
+        </div>
+        <audio controls preload="none" src="${esc(urlOf(a.path))}"></audio>
+      </div>`).join('')}
+    <div class="card">
+      <label style="margin-top:0">Ajouter un enregistrement (MP3 ou M4A conseillés, 50 Mo max)</label>
+      <input type="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" id="audioFile">
+      <label>Titre</label>
+      <input type="text" id="audioTitle" placeholder="ex. Démo guitare, Répète du 5 nov.">
+      <button class="btn-accent full" style="margin-top:12px" data-act="uploadaudio" data-id="${song.id}">Envoyer</button>
+    </div>
 
     <h3>Mon niveau</h3>
     <div class="levels">${LEVELS.map(l =>
@@ -883,8 +978,39 @@ const actions = {
     await q(db.from('songs').update({ title: t.trim() }).eq('id', el.dataset.id));
     route();
   },
+  async uploadaudio(el) {
+    const input = document.getElementById('audioFile');
+    const file = input?.files?.[0];
+    if (!file) { toast('Choisis d\'abord un fichier audio'); return; }
+    if (file.size > MAX_FILE) { toast(`Fichier trop lourd (${fmtSize(file.size)}). Maximum 50 Mo : exporte-le en MP3.`); return; }
+    const title = document.getElementById('audioTitle').value.trim() || file.name.replace(/\.[^.]+$/, '');
+    const ext = (file.name.split('.').pop() || 'audio').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const path = `audio/${el.dataset.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    el.textContent = 'Envoi en cours…';
+    const { error } = await db.storage.from(MEDIA).upload(path, file, { contentType: audioType(file) });
+    if (error) { el.textContent = 'Envoyer'; toast('Erreur : ' + error.message); return; }
+    await q(db.from('song_audio').insert({ song_id: el.dataset.id, title, path, size: file.size, added_by: state.me }));
+    toast('Enregistrement ajouté');
+    route();
+  },
+  async delaudio(el) {
+    if (!confirm('Supprimer cet enregistrement ?')) return;
+    await db.storage.from(MEDIA).remove([el.dataset.path]);
+    await q(db.from('song_audio').delete().eq('id', el.dataset.id));
+    route();
+  },
+  async delcover(el) {
+    if (!confirm('Retirer la pochette ?')) return;
+    await db.storage.from(MEDIA).remove([el.dataset.path]);
+    await q(db.from('songs').update({ cover_path: null }).eq('id', el.dataset.id));
+    route();
+  },
   async delsong(el) {
-    if (!confirm('Supprimer ce morceau ? Il sera aussi retiré des setlists.')) return;
+    if (!confirm('Supprimer ce morceau ? Il sera aussi retiré des setlists, avec ses enregistrements et sa pochette.')) return;
+    // Supprime d'abord les fichiers stockés (audio + pochette)
+    const s = await q(db.from('songs').select('cover_path, song_audio(path)').eq('id', el.dataset.id).maybeSingle());
+    const files = [s?.cover_path, ...((s?.song_audio || []).map(a => a.path))].filter(Boolean);
+    if (files.length) await db.storage.from(MEDIA).remove(files);
     await q(db.from('songs').delete().eq('id', el.dataset.id));
     go('#/morceaux');
   },
@@ -968,6 +1094,19 @@ document.addEventListener('change', async e => {
     if (el.dataset.change === 'itemnote') {
       await q(db.from('setlist_items').update({ note: el.value }).eq('id', el.dataset.id));
       toast('Note enregistrée');
+    } else if (el.dataset.change === 'cover') {
+      const file = el.files?.[0];
+      if (!file) return;
+      toast('Envoi de la pochette…');
+      let blob;
+      try { blob = await resizeImage(file, 800); } catch (e) { toast('Cette image ne peut pas être lue'); return; }
+      const path = `covers/${el.dataset.id}-${Date.now()}.jpg`;
+      const { error } = await db.storage.from(MEDIA).upload(path, blob, { contentType: 'image/jpeg' });
+      if (error) { toast('Erreur : ' + error.message); return; }
+      if (el.dataset.old) await db.storage.from(MEDIA).remove([el.dataset.old]);
+      await q(db.from('songs').update({ cover_path: path }).eq('id', el.dataset.id));
+      toast('Pochette enregistrée');
+      route();
     } else if (el.dataset.change === 'mynote') {
       await q(db.from('song_progress').upsert(
         { song_id: el.dataset.id, member: state.me, note: el.value, updated_at: new Date().toISOString() },
