@@ -34,7 +34,8 @@ main{padding:16px 16px calc(96px + env(safe-area-inset-bottom));max-width:720px;
 nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;background:var(--surface);
   border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
 nav.bottom a{flex:1;text-align:center;padding:10px 4px 12px;font-size:13px;color:var(--muted)}
-nav.bottom a .ico{display:block;font-size:22px;line-height:1.2}
+nav.bottom a .ico{display:block;width:24px;height:24px;margin:0 auto 3px;fill:none;stroke:currentColor;
+  stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 nav.bottom a.on{color:var(--accent);font-weight:600}
 h2{font-size:22px;margin:4px 0 14px}
 h3{font-size:15px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:26px 0 10px}
@@ -149,10 +150,14 @@ body{overflow-x:clip}
 </header>
 <main id="app"><div class="loading">Chargement…</div></main>
 <nav class="bottom" id="nav">
-  <a href="#/repetes" data-tab="repetes"><span class="ico">📅</span>Répètes</a>
-  <a href="#/calendrier" data-tab="calendrier"><span class="ico">🗓️</span>Calendrier</a>
-  <a href="#/morceaux" data-tab="morceaux"><span class="ico">🎸</span>Morceaux</a>
-  <a href="#/reglages" data-tab="reglages"><span class="ico">⚙️</span>Réglages</a>
+  <a href="#/repetes" data-tab="repetes">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/></svg>Répètes</a>
+  <a href="#/calendrier" data-tab="calendrier">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Calendrier</a>
+  <a href="#/morceaux" data-tab="morceaux">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>Morceaux</a>
+  <a href="#/reglages" data-tab="reglages">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Réglages</a>
 </nav>
 <div id="toast"></div>
 
@@ -186,8 +191,8 @@ const DAYS = [
   { name: 'dimanche', short: 'Dim', color: '#e3c341' },
   { name: 'lundi', short: 'Lun', color: '#4c9aff' },
   { name: 'mardi', short: 'Mar', color: '#a371f7' },
-  { name: 'mercredi', short: 'Mer', color: '#2ec4b6' },
-  { name: 'jeudi', short: 'Jeu', color: '#e8643a' },
+  { name: 'mercredi', short: 'Mer', color: '#8a9bb8' },
+  { name: 'jeudi', short: 'Jeu', color: '#2ec4b6' },
   { name: 'vendredi', short: 'Ven', color: '#f06292' },
   { name: 'samedi', short: 'Sam', color: '#3fb96b' },
 ];
