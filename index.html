@@ -109,6 +109,24 @@ details summary{cursor:pointer;color:var(--muted);padding:10px 0;font-weight:600
 .levels button.on.maitrise{background:var(--l3);border-color:var(--l3);color:#04172f;font-weight:700}
 .prog-row{padding:10px 0;border-bottom:1px solid var(--border)}
 .prog-row:last-child{border-bottom:0}
+.seg{display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:4px}
+.seg button{flex:1;border:0;background:transparent;min-height:40px}
+.seg button.on{background:var(--surface2);color:var(--accent);font-weight:700}
+label.check{display:flex;gap:12px;align-items:center;color:var(--text);font-size:16px;margin:0;padding:9px 0;border-bottom:1px solid var(--border)}
+label.check:last-child{border-bottom:0}
+label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+.alert{margin-top:8px;font-size:14px;font-weight:600;color:var(--maybe)}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.cal-head h2{margin:0;text-transform:capitalize}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-dow{text-align:center;font-size:12px;font-weight:700;padding-bottom:4px}
+.cal-cell{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:10px;
+  border:1px solid transparent;font-size:15px;color:var(--muted)}
+.cal-cell.has{font-weight:800;font-size:16px}
+.cal-cell.today{outline:2px solid var(--text);outline-offset:-2px;color:var(--text)}
+.cal-warn{position:absolute;top:1px;right:2px;font-size:11px}
+.cal-more{position:absolute;bottom:1px;right:4px;font-size:10px}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
 </style>
 </head>
 <body>
@@ -119,6 +137,7 @@ details summary{cursor:pointer;color:var(--muted);padding:10px 0;font-weight:600
 <main id="app"><div class="loading">Chargement…</div></main>
 <nav class="bottom" id="nav">
   <a href="#/repetes" data-tab="repetes"><span class="ico">📅</span>Répètes</a>
+  <a href="#/calendrier" data-tab="calendrier"><span class="ico">🗓️</span>Calendrier</a>
   <a href="#/morceaux" data-tab="morceaux"><span class="ico">🎸</span>Morceaux</a>
   <a href="#/reglages" data-tab="reglages"><span class="ico">⚙️</span>Réglages</a>
 </nav>
@@ -149,6 +168,39 @@ const LEVELS = [
 const LEVEL_RANK = Object.fromEntries(LEVELS.map((l, i) => [l.key, i]));
 const LEVEL_BY_KEY = Object.fromEntries(LEVELS.map(l => [l.key, l]));
 
+// ===== Jours de la semaine et couleurs (index = getDay(), 0 = dimanche) =====
+const DAYS = [
+  { name: 'dimanche', short: 'Dim', color: '#e3c341' },
+  { name: 'lundi', short: 'Lun', color: '#4c9aff' },
+  { name: 'mardi', short: 'Mar', color: '#a371f7' },
+  { name: 'mercredi', short: 'Mer', color: '#2ec4b6' },
+  { name: 'jeudi', short: 'Jeu', color: '#e8643a' },
+  { name: 'vendredi', short: 'Ven', color: '#f06292' },
+  { name: 'samedi', short: 'Sam', color: '#3fb96b' },
+];
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // lundi en premier
+const DEFAULT_WEEKDAY = 4;                 // jeudi
+const DEFAULT_TIME = '20:00';
+const ALERT_NON = 2;                       // alerte à partir de 2 « non »
+
+function dateObj(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d, 12); }
+function isoOf(dt) { return dt.toLocaleDateString('sv-SE'); }
+function dayInfo(iso) { return DAYS[dateObj(iso).getDay()]; }
+function dayChip(iso) {
+  const d = dayInfo(iso);
+  return `<span class="chip" style="background:${d.color}2e;color:${d.color}">${d.name}</span>`;
+}
+function nextWeekday(fromIso, wd) {
+  const dt = dateObj(fromIso);
+  dt.setDate(dt.getDate() + ((wd - dt.getDay() + 7) % 7));
+  return isoOf(dt);
+}
+function noCount(av) { return (av || []).filter(a => a.status === 'non').length; }
+function alertHtml(av) {
+  const n = noCount(av);
+  return n >= ALERT_NON ? `<div class="alert">⚠️ ${n} absents : peut-être changer de jour ?</div>` : '';
+}
+
 // Niveau d'un membre sur un morceau (pas d'entrée = pas commencé)
 function levelOf(progress, member) {
   return (progress || []).find(p => p.member === member)?.level || 'pas-commence';
@@ -168,7 +220,7 @@ function dotsHtml(progress) {
   }).join('')}</div>`;
 }
 
-const state = { band: 'Mon groupe', members: [], me: null, authed: false };
+const state = { band: 'Mon groupe', members: [], me: null, authed: false, existingDates: new Set() };
 const $app = document.getElementById('app');
 
 // ===== Utilitaires =====
@@ -225,6 +277,7 @@ async function route() {
     else if (view === 'morceaux') await viewSongs();
     else if (view === 'morceau' && id) await viewSong(id);
     else if (view === 'reglages') await viewSettings();
+    else if (view === 'calendrier') await viewCalendar(id);
     else await viewRehearsals();
   } catch (e) {
     $app.innerHTML = `<div class="empty">Impossible de charger les données.<br><br><button onclick="route()">Réessayer</button></div>`;
@@ -287,17 +340,20 @@ function countsHtml(av) {
 }
 function rehCard(r) {
   const mine = (r.availability || []).find(a => a.member === state.me);
-  return `<div class="card">
+  const col = dayInfo(r.date).color;
+  return `<div class="card" style="border-left:5px solid ${col}">
     <a href="#/repete/${r.id}" style="display:block">
       <div class="row between" style="align-items:flex-start">
         <div class="grow">
-          <div class="title cap">${esc(fmtDate(r.date))}</div>
+          <div class="title cap"><span style="color:${col}">${esc(fmtDate(r.date, { weekday: 'long' }))}</span> ${esc(fmtDate(r.date, { day: 'numeric', month: 'long' }))}</div>
           <div class="muted small">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</div>
         </div>
         <span class="muted">›</span>
       </div>
-      <div style="margin:10px 0">${countsHtml(r.availability || [])}</div>
+      <div style="margin:10px 0 0">${countsHtml(r.availability || [])}</div>
+      ${alertHtml(r.availability)}
     </a>
+    <div style="margin-top:10px"></div>
     ${voteButtons(r.id, mine?.status)}
   </div>`;
 }
@@ -308,20 +364,115 @@ async function viewRehearsals() {
   const up = reh.filter(r => r.date >= today);
   const past = reh.filter(r => r.date < today).reverse();
   const lastPlace = [...reh].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]?.place || '';
+  state.existingDates = new Set(reh.map(r => r.date));
+  const nextThu = nextWeekday(today, DEFAULT_WEEKDAY);
   $app.innerHTML = `
     <div class="row between"><h2>Répètes</h2>
       <button class="btn-accent" data-act="toggle" data-target="newReh">+ Nouvelle</button></div>
     <form id="newReh" class="card hidden" data-form="newReh">
-      <label>Date</label><input type="date" name="date" required value="${today}">
-      <label>Heure</label><input type="time" name="time" value="19:30">
+      <div class="seg">
+        <button type="button" class="on" data-act="rehmode" data-mode="single">Une date</button>
+        <button type="button" data-act="rehmode" data-mode="series">Plusieurs semaines</button>
+      </div>
+      <input type="hidden" name="mode" value="single">
+      <div id="singleFields">
+        <label>Date</label><input type="date" name="date" value="${nextThu}">
+      </div>
+      <div id="seriesFields" class="hidden">
+        <label>Jour de la semaine</label>
+        <select name="weekday">${WEEK_ORDER.map(i => `<option value="${i}" ${i === DEFAULT_WEEKDAY ? 'selected' : ''}>${DAYS[i].name}</option>`).join('')}</select>
+        <label>À partir du</label><input type="date" name="start" value="${today}">
+        <label>Nombre de semaines</label><input type="number" name="weeks" min="1" max="52" value="8" inputmode="numeric">
+        <label>Dates (décoche celles à sauter)</label>
+        <div id="seriesPreview"></div>
+      </div>
+      <label>Heure</label><input type="time" name="time" value="${DEFAULT_TIME}">
       <label>Lieu</label><input type="text" name="place" value="${esc(lastPlace)}" placeholder="Local de répète">
       <div class="row" style="margin-top:14px">
         <button type="button" class="btn-ghost grow" data-act="toggle" data-target="newReh">Annuler</button>
-        <button type="submit" class="btn-accent grow">Créer</button>
+        <button type="submit" class="btn-accent grow" id="newRehSubmit">Créer</button>
       </div>
     </form>
     ${up.length ? up.map(rehCard).join('') : `<div class="empty">Aucune répète prévue.<br>Ajoute la prochaine avec « + Nouvelle ».</div>`}
     ${past.length ? `<details><summary>Répètes passées (${past.length})</summary>${past.map(rehCard).join('')}</details>` : ''}
+  `;
+}
+
+// ===== Série de répètes =====
+function updateSeriesPreview() {
+  const f = document.getElementById('newReh');
+  if (!f) return;
+  const wd = Number(f.elements.weekday.value);
+  const start = f.elements.start.value || todayISO();
+  const n = Math.min(52, Math.max(1, Number(f.elements.weeks.value) || 1));
+  const first = dateObj(nextWeekday(start, wd));
+  const dates = [];
+  for (let i = 0; i < n; i++) { const dt = new Date(first); dt.setDate(first.getDate() + 7 * i); dates.push(isoOf(dt)); }
+  document.getElementById('seriesPreview').innerHTML = dates.map(iso => {
+    const exists = state.existingDates.has(iso);
+    return `<label class="check"><input type="checkbox" name="dates" value="${iso}" ${exists ? '' : 'checked'}>
+      <span class="cap">${esc(fmtDate(iso, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}</span>
+      ${exists ? '<span class="muted small">(déjà prévue)</span>' : ''}</label>`;
+  }).join('');
+  updateSubmitLabel();
+}
+function updateSubmitLabel() {
+  const f = document.getElementById('newReh');
+  const b = document.getElementById('newRehSubmit');
+  if (!f || !b) return;
+  if (f.elements.mode.value === 'series') {
+    const c = f.querySelectorAll('input[name=dates]:checked').length;
+    b.textContent = `Créer ${c} répète${c > 1 ? 's' : ''}`;
+  } else b.textContent = 'Créer';
+}
+
+// ===== Calendrier =====
+async function viewCalendar(ym) {
+  const today = todayISO();
+  if (!/^\d{4}-\d{2}$/.test(ym || '')) ym = today.slice(0, 7);
+  const [y, m] = ym.split('-').map(Number);
+  const first = new Date(y, m - 1, 1, 12), last = new Date(y, m, 0, 12);
+  const reh = await q(db.from('rehearsals').select('id,date,time,place,availability(status)')
+    .gte('date', isoOf(first)).lte('date', isoOf(last)).order('date').order('time'));
+  const byDate = {};
+  reh.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+  const prev = isoOf(new Date(y, m - 2, 1, 12)).slice(0, 7);
+  const next = isoOf(new Date(y, m, 1, 12)).slice(0, 7);
+  const offset = (first.getDay() + 6) % 7; // semaine commençant le lundi
+
+  let cells = WEEK_ORDER.map(i => `<div class="cal-dow" style="color:${DAYS[i].color}">${DAYS[i].short}</div>`).join('');
+  for (let i = 0; i < offset; i++) cells += '<div></div>';
+  for (let d = 1; d <= last.getDate(); d++) {
+    const iso = `${ym}-${String(d).padStart(2, '0')}`;
+    const list = byDate[iso];
+    const todayCls = iso === today ? ' today' : '';
+    if (list) {
+      const c = dayInfo(iso).color;
+      const warn = list.some(r => noCount(r.availability) >= ALERT_NON);
+      cells += `<a class="cal-cell has${todayCls}" href="#/repete/${list[0].id}" style="background:${c}33;border-color:${c};color:${c}">${d}
+        ${warn ? '<span class="cal-warn">⚠️</span>' : ''}${list.length > 1 ? `<span class="cal-more">×${list.length}</span>` : ''}</a>`;
+    } else cells += `<div class="cal-cell${todayCls}">${d}</div>`;
+  }
+
+  $app.innerHTML = `
+    <div class="cal-head">
+      <button class="btn-icon" data-act="calnav" data-ym="${prev}" aria-label="Mois précédent">‹</button>
+      <h2>${esc(first.toLocaleDateString('fr-CH', { month: 'long', year: 'numeric' }))}</h2>
+      <button class="btn-icon" data-act="calnav" data-ym="${next}" aria-label="Mois suivant">›</button>
+    </div>
+    <div class="cal-grid">${cells}</div>
+    ${ym !== today.slice(0, 7) ? `<button class="btn-sm full" style="margin-top:12px" data-act="calnav" data-ym="${today.slice(0, 7)}">Revenir à aujourd'hui</button>` : ''}
+    <div class="legend">${WEEK_ORDER.map(i => `<span class="chip" style="background:${DAYS[i].color}2e;color:${DAYS[i].color}">${DAYS[i].name}</span>`).join('')}</div>
+
+    <h3>Répètes du mois (${reh.length})</h3>
+    ${reh.length ? reh.map(r => {
+      const c = dayInfo(r.date).color;
+      return `<a class="card" style="display:block;border-left:5px solid ${c};padding:10px 14px" href="#/repete/${r.id}">
+        <div class="row between"><span class="cap"><strong style="color:${c}">${esc(fmtDate(r.date, { weekday: 'long' }))}</strong> ${esc(fmtDate(r.date, { day: 'numeric', month: 'long' }))}</span>
+        <span class="muted small">${esc(r.time || '')}</span></div>
+        ${alertHtml(r.availability)}
+      </a>`;
+    }).join('') : '<div class="empty">Aucune répète ce mois-ci.</div>'}
   `;
 }
 
@@ -342,9 +493,10 @@ async function viewRehearsal(id) {
     <a class="back" href="#/repetes">‹ Répètes</a>
     <h2 class="cap">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
     <div class="row between wrap">
-      <div class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</div>
+      <div class="row wrap" style="gap:8px">${dayChip(r.date)}<span class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</span></div>
       <button class="btn-sm" data-act="toggle" data-target="editReh">Modifier</button>
     </div>
+    ${alertHtml(av)}
     <form id="editReh" class="card hidden" data-form="editReh" data-id="${r.id}" style="margin-top:12px">
       <label>Date</label><input type="date" name="date" required value="${esc(r.date)}">
       <label>Heure</label><input type="time" name="time" value="${esc(r.time)}">
@@ -568,6 +720,16 @@ const actions = {
     await Promise.all(items.map((it, idx) => it.position === idx ? null : q(db.from('setlist_items').update({ position: idx }).eq('id', it.id))));
     route();
   },
+  rehmode(el) {
+    const f = document.getElementById('newReh');
+    const series = el.dataset.mode === 'series';
+    f.elements.mode.value = el.dataset.mode;
+    f.querySelectorAll('[data-act=rehmode]').forEach(b => b.classList.toggle('on', b === el));
+    document.getElementById('singleFields').classList.toggle('hidden', series);
+    document.getElementById('seriesFields').classList.toggle('hidden', !series);
+    if (series) updateSeriesPreview(); else updateSubmitLabel();
+  },
+  calnav(el) { go('#/calendrier/' + el.dataset.ym); },
   async level(el) {
     await q(db.from('song_progress').upsert(
       { song_id: el.dataset.id, member: state.me, level: el.dataset.l, updated_at: new Date().toISOString() },
@@ -652,8 +814,17 @@ document.addEventListener('submit', async e => {
       state.authed = true;
       await start();
     } else if (form.dataset.form === 'newReh') {
-      const r = await q(db.from('rehearsals').insert({ date: d.date, time: d.time, place: d.place.trim(), created_by: state.me }).select('id').single());
-      go('#/repete/' + r.id);
+      if (d.mode === 'series') {
+        const dates = [...form.querySelectorAll('input[name=dates]:checked')].map(i => i.value);
+        if (!dates.length) { toast('Aucune date cochée'); return; }
+        await q(db.from('rehearsals').insert(dates.map(date => ({ date, time: d.time, place: d.place.trim(), created_by: state.me }))));
+        toast(`${dates.length} répète${dates.length > 1 ? 's créées' : ' créée'}`);
+        go('#/repetes');
+      } else {
+        if (!d.date) { toast('Choisis une date'); return; }
+        const r = await q(db.from('rehearsals').insert({ date: d.date, time: d.time, place: d.place.trim(), created_by: state.me }).select('id').single());
+        go('#/repete/' + r.id);
+      }
     } else if (form.dataset.form === 'editReh') {
       await q(db.from('rehearsals').update({ date: d.date, time: d.time, place: d.place.trim() }).eq('id', form.dataset.id));
       route();
@@ -683,6 +854,13 @@ document.addEventListener('change', async e => {
     }
   } catch (err) {}
 });
+
+// ===== Aperçu de la série de répètes =====
+['input', 'change'].forEach(evt => document.addEventListener(evt, e => {
+  if (!e.target.closest('#newReh')) return;
+  if (e.target.name === 'dates') updateSubmitLabel();
+  else if (['weekday', 'start', 'weeks'].includes(e.target.name)) updateSeriesPreview();
+}));
 
 // ===== Recherche de morceaux =====
 document.addEventListener('input', e => {
