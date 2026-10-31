@@ -148,6 +148,28 @@ label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 audio{width:100%;margin-top:8px;color-scheme:dark}
 .audio-item{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px}
 input[type=file]{padding:9px;font-size:15px}
+label.pick{display:flex;align-items:center;justify-content:center;gap:10px;min-height:50px;margin:0;border-radius:11px;
+  border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;font-weight:600;cursor:pointer}
+label.pick svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.player{position:fixed;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;gap:8px;
+  background:#1f1f25;border-top:1px solid var(--border);padding:8px 10px 6px;box-shadow:0 -6px 18px rgba(0,0,0,.35)}
+.pl-cover{flex:none;width:46px;height:46px;border-radius:8px;overflow:hidden;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700}
+.pl-cover img{width:100%;height:100%;object-fit:cover}
+.pl-title{font-weight:650;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.pl-time{font-size:11px;color:var(--muted);min-width:30px;text-align:center;font-variant-numeric:tabular-nums}
+#plSeek{flex:1;padding:0;height:20px;border:0;background:transparent;accent-color:var(--accent)}
+.pl-btn{flex:none;width:40px;height:40px;min-height:0;padding:0;border:0;background:transparent;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text)}
+.pl-btn svg{width:20px;height:20px;fill:currentColor;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.pl-btn.pl-main{width:46px;height:46px;background:var(--accent);color:#fff}
+.pl-btn:disabled{opacity:.3}
+body.playing main{padding-bottom:calc(236px + env(safe-area-inset-bottom))}
+body.playing .fab{bottom:calc(158px + env(safe-area-inset-bottom))}
+body.playing #toast{bottom:calc(160px + env(safe-area-inset-bottom))}
+.listen-row{gap:12px;cursor:pointer}
+.listen-row.on{border-color:var(--accent);background:#25211f}
+.listen-row.on .listen-title{color:var(--accent)}
+label.pick-change{display:inline;margin:0 0 0 10px;color:var(--accent);font-size:15px;font-weight:600;cursor:pointer}
 body{overflow-x:clip}
 @keyframes calFromRight{from{transform:translateX(40%);opacity:0}to{transform:none;opacity:1}}
 @keyframes calFromLeft{from{transform:translateX(-40%);opacity:0}to{transform:none;opacity:1}}
@@ -169,9 +191,27 @@ body{overflow-x:clip}
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Calendrier</a>
   <a href="#/morceaux" data-tab="morceaux">
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>Morceaux</a>
+  <a href="#/ecoute" data-tab="ecoute">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4.5" height="6.5" rx="1.8"/><rect x="16.5" y="14" width="4.5" height="6.5" rx="1.8"/></svg>Écoute</a>
   <a href="#/reglages" data-tab="reglages">
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Réglages</a>
 </nav>
+<div id="player" class="player hidden">
+  <span id="plCover" class="pl-cover"></span>
+  <div class="grow" style="min-width:0">
+    <div id="plTitle" class="pl-title"></div>
+    <div id="plSub" class="muted small pl-sub"></div>
+    <div class="row" style="gap:8px">
+      <span id="plTime" class="pl-time">0:00</span>
+      <input type="range" id="plSeek" min="0" max="1000" value="0" aria-label="Position">
+      <span id="plDur" class="pl-time">0:00</span>
+    </div>
+  </div>
+  <button class="pl-btn" id="plPrev" aria-label="Précédent"><svg viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M19 5 9 12l10 7z"/></svg></button>
+  <button class="pl-btn pl-main" id="plPlay" aria-label="Lecture"><svg viewBox="0 0 24 24" id="plPlayIco"><path d="M8 5v14l11-7z"/></svg></button>
+  <button class="pl-btn" id="plNext" aria-label="Suivant"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z"/></svg></button>
+</div>
+<audio id="plAudio" preload="none"></audio>
 <div id="toast"></div>
 
 <script>
@@ -356,6 +396,7 @@ async function route() {
     else if (view === 'morceau' && id) await viewSong(id);
     else if (view === 'reglages') await viewSettings();
     else if (view === 'calendrier') await viewCalendar(id);
+    else if (view === 'ecoute') await viewListen();
     else await viewRehearsals();
   } catch (e) {
     $app.innerHTML = `<div class="empty">Impossible de charger les données.<br><br><button onclick="route()">Réessayer</button></div>`;
@@ -364,6 +405,7 @@ async function route() {
 
 // ===== Connexion (mot de passe du groupe) =====
 function viewLogin() {
+  if (typeof Player !== 'undefined') Player.stop();
   document.getElementById('nav').classList.add('hidden');
   document.getElementById('bandName').textContent = 'Répètes';
   document.getElementById('meLabel').textContent = '';
@@ -816,9 +858,16 @@ async function viewSong(id) {
       </div>`).join('')}
     <div class="card">
       <label style="margin-top:0">Ajouter un enregistrement (MP3 ou M4A conseillés, 50 Mo max)</label>
-      <input type="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" id="audioFile">
+      <input type="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" id="audioFile" class="file-hidden" data-change="audiofile">
+      <label for="audioFile" id="audioPick" class="pick">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>
+        Choisir un fichier audio</label>
+      <div id="audioChosen" class="row between hidden" style="background:var(--bg);border:1px solid var(--border);border-radius:11px;padding:10px 12px">
+        <span id="audioChosenName" class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <label for="audioFile" class="pick-change">Changer</label>
+      </div>
       <label>Titre</label>
-      <input type="text" id="audioTitle" placeholder="ex. Démo guitare, Répète du 5 nov.">
+      <input type="text" id="audioTitle" placeholder="ex. Démo guitare, Répète du 5 nov." oninput="this.dataset.auto='0'">
       <button class="btn-accent full" style="margin-top:12px" data-act="uploadaudio" data-id="${song.id}">Envoyer</button>
     </div>
 
@@ -858,6 +907,111 @@ async function viewSong(id) {
     <button class="btn-danger full" style="margin-top:24px" data-act="delsong" data-id="${song.id}">Supprimer ce morceau</button>
   `;
 }
+
+// ===== Page d'écoute =====
+async function viewListen() {
+  const songs = await q(db.from('songs').select('id,title,cover_path,song_audio(id,title,path,created_at)').order('title'));
+  const withAudio = songs.filter(s => (s.song_audio || []).length)
+    .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+  const urlOf = await signedUrls(withAudio.flatMap(s => [s.cover_path, ...s.song_audio.map(a => a.path)]));
+  // Pour chaque morceau, on joue l'enregistrement le plus récent
+  state.listenQueue = withAudio.map(s => {
+    const a = [...s.song_audio].sort((x, y) => (y.created_at || '').localeCompare(x.created_at || ''))[0];
+    return { songId: s.id, title: s.title, audioTitle: a.title || '', url: urlOf(a.path), cover: urlOf(s.cover_path), count: s.song_audio.length };
+  });
+  $app.innerHTML = `
+    <h2>Écoute</h2>
+    ${withAudio.length ? `
+      <button class="btn-accent full" style="margin-bottom:16px" data-act="playat" data-i="0">▶&nbsp; Tout écouter (${withAudio.length})</button>
+      ${state.listenQueue.map((t, i) => `
+        <div class="card row listen-row" data-act="playat" data-i="${i}" data-song="${t.songId}">
+          ${coverThumb(t.title, t.cover, 52)}
+          <div class="grow" style="min-width:0">
+            <div class="title listen-title" style="font-size:17px">${esc(t.title)}</div>
+            <div class="muted small" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.audioTitle)}${t.count > 1 ? ` · ${t.count} enregistrements` : ''}</div>
+          </div>
+        </div>`).join('')}
+      <p class="muted small">Pour écouter un autre enregistrement d'un morceau, ouvre sa fiche dans l'onglet Morceaux.</p>`
+    : `<div class="empty">Aucun enregistrement pour l'instant.<br>Ajoute-en depuis la fiche d'un morceau.</div>`}
+  `;
+  Player.highlight();
+}
+
+// ===== Lecteur global (reste actif quand on change de page) =====
+const Player = {
+  queue: [], i: -1,
+  audio: document.getElementById('plAudio'),
+  el: id => document.getElementById(id),
+  fmt(t) { if (!isFinite(t)) return '0:00'; t = Math.floor(t); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); },
+  start(queue, i) { this.queue = queue.slice(); this.play(i); },
+  play(i) {
+    if (i < 0 || i >= this.queue.length) return;
+    this.i = i;
+    const t = this.queue[i];
+    this.audio.src = t.url;
+    this.audio.play().catch(() => {});
+    this.el('player').classList.remove('hidden');
+    document.body.classList.add('playing');
+    this.el('plTitle').textContent = t.title;
+    this.el('plSub').textContent = t.audioTitle;
+    const c = this.el('plCover');
+    c.innerHTML = '';
+    if (t.cover) { const img = document.createElement('img'); img.src = t.cover; img.alt = ''; c.appendChild(img); }
+    else c.textContent = (t.title || '?').charAt(0).toUpperCase();
+    this.el('plPrev').disabled = i === 0;
+    this.el('plNext').disabled = i === this.queue.length - 1;
+    this.highlight();
+    if ('mediaSession' in navigator && window.MediaMetadata) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: t.title, artist: state.band, album: t.audioTitle,
+        artwork: t.cover ? [{ src: t.cover, sizes: '800x800', type: 'image/jpeg' }] : [],
+      });
+    }
+  },
+  toggle() { if (this.audio.paused) this.audio.play().catch(() => {}); else this.audio.pause(); },
+  next() { if (this.i < this.queue.length - 1) this.play(this.i + 1); },
+  prev() { if (this.audio.currentTime > 3) this.audio.currentTime = 0; else if (this.i > 0) this.play(this.i - 1); },
+  stop() {
+    this.audio.pause(); this.audio.removeAttribute('src'); this.queue = []; this.i = -1;
+    this.el('player').classList.add('hidden'); document.body.classList.remove('playing'); this.highlight();
+  },
+  highlight() {
+    const cur = this.queue[this.i]?.songId;
+    document.querySelectorAll('.listen-row').forEach(r => r.classList.toggle('on', !!cur && r.dataset.song === cur));
+  },
+  setIcon() {
+    this.el('plPlayIco').innerHTML = this.audio.paused
+      ? '<path d="M8 5v14l11-7z"/>'
+      : '<rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/>';
+    this.el('plPlay').setAttribute('aria-label', this.audio.paused ? 'Lecture' : 'Pause');
+  },
+};
+(() => {
+  const a = Player.audio, seek = Player.el('plSeek');
+  let dragging = false;
+  Player.el('plPlay').addEventListener('click', () => Player.toggle());
+  Player.el('plNext').addEventListener('click', () => Player.next());
+  Player.el('plPrev').addEventListener('click', () => Player.prev());
+  a.addEventListener('play', () => Player.setIcon());
+  a.addEventListener('pause', () => Player.setIcon());
+  a.addEventListener('ended', () => { if (Player.i < Player.queue.length - 1) Player.next(); else Player.setIcon(); });
+  a.addEventListener('loadedmetadata', () => { Player.el('plDur').textContent = Player.fmt(a.duration); });
+  a.addEventListener('timeupdate', () => {
+    Player.el('plTime').textContent = Player.fmt(a.currentTime);
+    if (!dragging && a.duration) seek.value = Math.round(a.currentTime / a.duration * 1000);
+  });
+  a.addEventListener('error', () => { if (a.getAttribute('src')) toast('Impossible de lire cet enregistrement'); });
+  seek.addEventListener('input', () => { dragging = true; if (a.duration) Player.el('plTime').textContent = Player.fmt(seek.value / 1000 * a.duration); });
+  seek.addEventListener('change', () => { if (a.duration) a.currentTime = seek.value / 1000 * a.duration; dragging = false; });
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.setActionHandler('play', () => a.play());
+      navigator.mediaSession.setActionHandler('pause', () => a.pause());
+      navigator.mediaSession.setActionHandler('nexttrack', () => Player.next());
+      navigator.mediaSession.setActionHandler('previoustrack', () => Player.prev());
+    } catch (e) {}
+  }
+})();
 
 // ===== Réglages =====
 async function viewSettings() {
@@ -937,6 +1091,7 @@ const actions = {
     const first = f.querySelector('input[type=text], input[type=date]');
     if (first && f.id === 'newSong') setTimeout(() => first.focus(), 300);
   },
+  playat(el) { Player.start(state.listenQueue || [], Number(el.dataset.i)); },
   rehmode(el) {
     const f = document.getElementById('newReh');
     const series = el.dataset.mode === 'series';
@@ -1094,6 +1249,25 @@ document.addEventListener('change', async e => {
     if (el.dataset.change === 'itemnote') {
       await q(db.from('setlist_items').update({ note: el.value }).eq('id', el.dataset.id));
       toast('Note enregistrée');
+    } else if (el.dataset.change === 'audiofile') {
+      const file = el.files?.[0];
+      const pick = document.getElementById('audioPick');
+      const chosen = document.getElementById('audioChosen');
+      const title = document.getElementById('audioTitle');
+      if (!file) return;
+      if (file.size > MAX_FILE) {
+        toast(`Fichier trop lourd (${fmtSize(file.size)}). Maximum 50 Mo : exporte-le en MP3.`);
+        el.value = '';
+        pick.classList.remove('hidden'); chosen.classList.add('hidden');
+        return;
+      }
+      document.getElementById('audioChosenName').textContent = `${file.name} · ${fmtSize(file.size)}`;
+      pick.classList.add('hidden'); chosen.classList.remove('hidden');
+      // Titre prérempli avec le nom du fichier, sauf si l'utilisateur en a tapé un
+      if (!title.value.trim() || title.dataset.auto === '1') {
+        title.value = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+        title.dataset.auto = '1';
+      }
     } else if (el.dataset.change === 'cover') {
       const file = el.files?.[0];
       if (!file) return;
