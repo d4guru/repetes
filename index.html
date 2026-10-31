@@ -131,6 +131,19 @@ label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 .cancelled{opacity:.6}
 .cancelled .title,.cancelled .strike{text-decoration:line-through}
 .cal-cell.cancel{opacity:.45;text-decoration:line-through}
+.sheet-wrap{position:fixed;inset:0;z-index:30}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6);animation:sheetFade .2s ease-out}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-width:720px;margin:0 auto;max-height:90vh;max-height:90dvh;display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--border);border-bottom:0;border-radius:20px 20px 0 0;animation:sheetUp .28s cubic-bezier(.2,.8,.2,1)}
+.sheet-grab{flex:none;width:40px;height:5px;border-radius:3px;background:var(--border);margin:8px auto 2px}
+.sheet-body{flex:1;overflow-y:auto;padding:4px 16px 16px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.sheet-foot{flex:none;display:flex;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--border)}
+body.sheet-open{overflow:hidden}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes sheetFade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){.sheet,.sheet-bg{animation:none}}
+.cal-cell.empty-day{cursor:pointer}
+.cal-cell.empty-day:active{background:var(--surface2)}
 .pill-row{margin-top:10px}
 .pill{display:inline-block;font-size:13px;font-weight:600;line-height:1.35;padding:4px 11px;border-radius:99px}
 .pill.warn{background:rgba(227,179,65,.16);color:#e9c46a}
@@ -222,6 +235,14 @@ body{overflow-x:clip}
   <button class="pl-btn" id="plNext" aria-label="Suivant"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z"/></svg></button>
 </div>
 <audio id="plAudio" preload="none"></audio>
+<div id="sheet" class="sheet-wrap hidden">
+  <div class="sheet-bg" data-act="closesheet"></div>
+  <form id="sheetForm" class="sheet" data-form="" novalidate>
+    <div class="sheet-grab"></div>
+    <div class="sheet-body" id="sheetBody"></div>
+    <div class="sheet-foot" id="sheetFoot"></div>
+  </form>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -559,57 +580,142 @@ async function viewRehearsals() {
   const today = todayISO();
   const up = reh.filter(r => r.date >= today);
   const past = reh.filter(r => r.date < today).reverse();
-  const lastPlace = [...reh].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]?.place || '';
-  state.existingDates = new Set(reh.map(r => r.date));
-  const nextThu = nextWeekday(today, DEFAULT_WEEKDAY);
   $app.innerHTML = `
     <h2>Répètes</h2>
-    ${fabHtml('newReh', 'Nouvelle répète')}
-    <form id="newReh" class="card hidden" data-form="newReh">
-      <div class="seg">
-        <button type="button" class="on" data-act="rehmode" data-mode="single">Une date</button>
-        <button type="button" data-act="rehmode" data-mode="series">Plusieurs semaines</button>
-      </div>
-      <input type="hidden" name="mode" value="single">
-      <div id="singleFields">
-        <label>Date</label><input type="date" name="date" value="${nextThu}">
-      </div>
-      <div id="seriesFields" class="hidden">
-        <label>Jour de la semaine</label>
-        <select name="weekday">${WEEK_ORDER.map(i => `<option value="${i}" ${i === DEFAULT_WEEKDAY ? 'selected' : ''}>${DAYS[i].name}</option>`).join('')}</select>
-        <label>À partir du</label><input type="date" name="start" value="${today}">
-        <label>Nombre de semaines</label><input type="number" name="weeks" min="1" max="52" value="8" inputmode="numeric">
-        <label>Dates (décoche celles à sauter)</label>
-        <div id="seriesPreview"></div>
-      </div>
-      <label>Heure</label><input type="time" name="time" value="${DEFAULT_TIME}">
-      <label>Lieu</label><input type="text" name="place" value="${esc(lastPlace)}" placeholder="Local de répète">
-      <div class="row" style="margin-top:14px">
-        <button type="button" class="btn-ghost grow" data-act="toggle" data-target="newReh">Annuler</button>
-        <button type="submit" class="btn-accent grow" id="newRehSubmit">Créer</button>
-      </div>
-    </form>
+    ${fabHtml('newreh', 'Nouvelle répète')}
     ${up.length ? up.map(rehCard).join('') : `<div class="empty">Aucune répète prévue.<br>Ajoute la prochaine avec le bouton + en bas à droite.</div>`}
     ${past.length ? `<details><summary>Répètes passées (${past.length})</summary>${past.map(rehCard).join('')}</details>` : ''}
   `;
 }
 
 // Bouton rond flottant « + »
-function fabHtml(target, label) {
-  return `<button class="fab" data-act="openform" data-target="${target}" aria-label="${label}">
+function fabHtml(act, label) {
+  return `<button class="fab" data-act="${act}" aria-label="${label}">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`;
 }
 
+// ===== Fenêtre qui monte du bas (popup) =====
+const Sheet = {
+  open(formName, bodyHtml, footHtml) {
+    const f = document.getElementById('sheetForm');
+    f.dataset.form = formName;
+    f.id = 'sheetForm';
+    document.getElementById('sheetBody').innerHTML = bodyHtml;
+    document.getElementById('sheetFoot').innerHTML = footHtml;
+    document.getElementById('sheet').classList.remove('hidden');
+    document.body.classList.add('sheet-open');
+    document.getElementById('sheetBody').scrollTop = 0;
+    if (!this.isOpen) { history.pushState({ sheet: 1 }, ''); this.isOpen = true; }
+  },
+  // fromHistory : fermeture déclenchée par le bouton retour du téléphone
+  close(fromHistory) {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    document.getElementById('sheet').classList.add('hidden');
+    document.body.classList.remove('sheet-open');
+    document.getElementById('sheetBody').innerHTML = '';
+    if (!fromHistory) history.back();
+  },
+};
+window.addEventListener('popstate', () => { if (Sheet.isOpen) Sheet.close(true); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && Sheet.isOpen) Sheet.close(); });
+// Après une création : fermer la fenêtre puis aller à la bonne page
+function afterSheet(hash) {
+  Sheet.close();
+  setTimeout(() => { if (hash) go(hash); else route(); }, 200);
+}
+
+function addMonths(iso, n) { const d = dateObj(iso); d.setMonth(d.getMonth() + n); return isoOf(d); }
+
+// Ouvre la fenêtre « Nouvelle répète » (depuis le bouton + ou un jour du calendrier)
+async function openRehSheet(dateIso, from) {
+  const today = todayISO();
+  const [songs, reh] = await Promise.all([
+    q(db.from('songs').select('id,title,cover_path').order('title')),
+    q(db.from('rehearsals').select('date,place,created_at')),
+  ]);
+  songs.sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+  const urlOf = await signedUrls(songs.map(s => s.cover_path));
+  state.existingDates = new Set(reh.map(r => r.date));
+  state.sheetFrom = from;
+  const lastPlace = [...reh].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]?.place || '';
+  const date = dateIso || nextWeekday(today, DEFAULT_WEEKDAY);
+  const wd = dateIso ? dateObj(dateIso).getDay() : DEFAULT_WEEKDAY;
+  const start = dateIso || today;
+
+  const body = `
+    <h2 style="margin:6px 0 14px">Nouvelle répète</h2>
+    <div class="seg">
+      <button type="button" class="on" data-act="rehmode" data-mode="single">Une date</button>
+      <button type="button" data-act="rehmode" data-mode="series">Plusieurs semaines</button>
+    </div>
+    <input type="hidden" name="mode" value="single">
+    <div id="singleFields">
+      <label>Date</label><input type="date" name="date" value="${date}" min="${today}">
+    </div>
+    <div id="seriesFields" class="hidden">
+      <label>Jour de la semaine</label>
+      <select name="weekday">${WEEK_ORDER.map(i => `<option value="${i}" ${i === wd ? 'selected' : ''}>${DAYS[i].name}</option>`).join('')}</select>
+      <div class="row" style="gap:10px">
+        <div class="grow"><label>À partir du</label><input type="date" name="start" value="${start}" min="${today}"></div>
+        <div class="grow"><label>Jusqu'au</label><input type="date" name="end" value="${addMonths(start, 2)}" min="${today}"></div>
+      </div>
+      <label>Dates (décoche celles à sauter)</label>
+      <div id="seriesPreview"></div>
+    </div>
+    <div class="row" style="gap:10px">
+      <div style="width:42%"><label>Heure</label><input type="time" name="time" value="${DEFAULT_TIME}"></div>
+      <div class="grow"><label>Lieu</label><input type="text" name="place" value="${esc(lastPlace)}" placeholder="Local de répète"></div>
+    </div>
+    <div class="row between" style="margin-top:18px">
+      <label style="margin:0">Morceaux${songs.length ? ` (${songs.length})` : ''}</label>
+      ${songs.length ? `<button type="button" class="btn-sm btn-ghost" data-act="checkall">Tout cocher</button>` : ''}
+    </div>
+    ${songs.length ? `<div id="songChecks">${songs.map(s => `
+      <label class="check"><input type="checkbox" name="songs" value="${s.id}">
+        ${coverThumb(s.title, urlOf(s.cover_path), 32)}<span class="grow">${esc(s.title)}</span></label>`).join('')}</div>`
+      : `<div class="muted small" style="margin-top:6px">Aucun morceau pour l'instant.</div>`}`;
+  const foot = `
+    <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
+    <button type="submit" class="btn-accent grow" id="newRehSubmit">Créer</button>`;
+  Sheet.open('newReh', body, foot);
+}
+
+function openSongSheet() {
+  Sheet.open('newSong', `
+    <h2 style="margin:6px 0 14px">Nouveau morceau</h2>
+    <label style="margin-top:0">Titre</label>
+    <input type="text" name="title" required placeholder="Titre du morceau" autocomplete="off">`, `
+    <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
+    <button type="submit" class="btn-accent grow">Créer</button>`);
+  setTimeout(() => document.querySelector('#sheetBody input[name=title]')?.focus(), 250);
+}
+
 // ===== Série de répètes =====
-function updateSeriesPreview() {
-  const f = document.getElementById('newReh');
-  if (!f) return;
+function seriesDates(f) {
   const wd = Number(f.elements.weekday.value);
   const start = f.elements.start.value || todayISO();
-  const n = Math.min(52, Math.max(1, Number(f.elements.weeks.value) || 1));
-  const first = dateObj(nextWeekday(start, wd));
+  const end = f.elements.end.value;
+  if (!end || end < start) return null;
   const dates = [];
-  for (let i = 0; i < n; i++) { const dt = new Date(first); dt.setDate(first.getDate() + 7 * i); dates.push(isoOf(dt)); }
+  const dt = dateObj(nextWeekday(start, wd));
+  while (isoOf(dt) <= end && dates.length < 52) { dates.push(isoOf(dt)); dt.setDate(dt.getDate() + 7); }
+  return dates;
+}
+function updateSeriesPreview() {
+  const f = document.getElementById('sheetForm');
+  if (!f || !f.elements.weekday) return;
+  const dates = seriesDates(f);
+  if (!dates) {
+    document.getElementById('seriesPreview').innerHTML = `<div class="pill-row"><span class="pill no">La date de fin est avant la date de début</span></div>`;
+    updateSubmitLabel();
+    return;
+  }
+  if (!dates.length) {
+    document.getElementById('seriesPreview').innerHTML = `<div class="muted small">Aucun ${esc(DAYS[Number(f.elements.weekday.value)].name)} dans cette période.</div>`;
+    updateSubmitLabel();
+    return;
+  }
   document.getElementById('seriesPreview').innerHTML = dates.map(iso => {
     const exists = state.existingDates.has(iso);
     return `<label class="check"><input type="checkbox" name="dates" value="${iso}" ${exists ? '' : 'checked'}>
@@ -619,7 +725,7 @@ function updateSeriesPreview() {
   updateSubmitLabel();
 }
 function updateSubmitLabel() {
-  const f = document.getElementById('newReh');
+  const f = document.getElementById('sheetForm');
   const b = document.getElementById('newRehSubmit');
   if (!f || !b) return;
   if (f.elements.mode.value === 'series') {
@@ -654,6 +760,9 @@ async function viewCalendar(ym) {
       const cancel = list.every(r => rehState(r).s === 'annulee') ? ' cancel' : '';
       cells += `<a class="cal-cell has${todayCls}${cancel}" href="#/repete/${list[0].id}" style="background:${c}33;border-color:${c};color:${c}">${d}
         ${warn ? '<span class="cal-pill"></span>' : ''}${list.length > 1 ? `<span class="cal-more">×${list.length}</span>` : ''}</a>`;
+    } else if (iso >= today) {
+      // Jour vide (aujourd'hui ou futur) : un appui ouvre la fenêtre de création
+      cells += `<div class="cal-cell empty-day${todayCls}" data-act="newreh" data-date="${iso}">${d}</div>`;
     } else cells += `<div class="cal-cell${todayCls}">${d}</div>`;
   }
 
@@ -665,7 +774,7 @@ async function viewCalendar(ym) {
     <div id="calSwipe" data-prev="${prev}" data-next="${next}">
       <div class="cal-grid ${state.calDir ? 'cal-in-' + state.calDir : ''}">${cells}</div>
     </div>
-    <p class="muted small" style="text-align:center;margin:8px 0 0">Glisse à gauche ou à droite pour changer de mois</p>
+    <p class="muted small" style="text-align:center;margin:8px 0 0">Glisse pour changer de mois · touche un jour libre pour créer une répète</p>
     <div class="legend">${WEEK_ORDER.map(i => `<span class="chip" style="background:${DAYS[i].color}2e;color:${DAYS[i].color}">${DAYS[i].name}</span>`).join('')}</div>
 
     <h3>Répètes du mois (${reh.length})</h3>
@@ -848,14 +957,7 @@ async function viewSongs() {
   const groups = ['en-cours', 'a-apprendre', 'pret'];
   $app.innerHTML = `
     <h2>Morceaux</h2>
-    ${fabHtml('newSong', 'Nouveau morceau')}
-    <form id="newSong" class="card hidden" data-form="newSong">
-      <label style="margin-top:0">Titre</label><input type="text" name="title" required placeholder="Titre du morceau">
-      <div class="row" style="margin-top:14px">
-        <button type="button" class="btn-ghost grow" data-act="toggle" data-target="newSong">Annuler</button>
-        <button type="submit" class="btn-accent grow">Ajouter</button>
-      </div>
-    </form>
+    ${fabHtml('newsong', 'Nouveau morceau')}
     ${songs.length > 5 ? `<input type="search" id="songSearch" placeholder="Rechercher un morceau…" style="margin-bottom:14px">` : ''}
     ${songs.length ? groups.map(g => {
       const list = songs.filter(s => s.status === g);
@@ -1160,13 +1262,17 @@ const actions = {
     toast('Setlist vidée');
     route();
   },
-  openform(el) {
-    const f = document.getElementById(el.dataset.target);
-    if (!f) return;
-    f.classList.remove('hidden');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    const first = f.querySelector('input[type=text], input[type=date]');
-    if (first && f.id === 'newSong') setTimeout(() => first.focus(), 300);
+  async newreh(el) {
+    const fromCal = !!el.dataset.date;
+    await openRehSheet(el.dataset.date || null, fromCal ? 'calendar' : 'list');
+  },
+  newsong() { openSongSheet(); },
+  closesheet() { Sheet.close(); },
+  checkall(el) {
+    const boxes = [...document.querySelectorAll('#songChecks input[name=songs]')];
+    const allOn = boxes.every(b => b.checked);
+    boxes.forEach(b => { b.checked = !allOn; });
+    el.textContent = allOn ? 'Tout cocher' : 'Tout décocher';
   },
   async decide(el) {
     await q(db.from('rehearsal_votes').upsert(
@@ -1176,7 +1282,7 @@ const actions = {
   },
   playat(el) { Player.start(state.listenQueue || [], Number(el.dataset.i)); },
   rehmode(el) {
-    const f = document.getElementById('newReh');
+    const f = document.getElementById('sheetForm');
     const series = el.dataset.mode === 'series';
     f.elements.mode.value = el.dataset.mode;
     f.querySelectorAll('[data-act=rehmode]').forEach(b => b.classList.toggle('on', b === el));
@@ -1300,23 +1406,34 @@ document.addEventListener('submit', async e => {
       state.authed = true;
       await start();
     } else if (form.dataset.form === 'newReh') {
+      // Morceaux cochés (ordre alphabétique, comme affichés)
+      const songIds = [...form.querySelectorAll('input[name=songs]:checked')].map(i => i.value);
+      const place = (d.place || '').trim();
+      let dates;
       if (d.mode === 'series') {
-        const dates = [...form.querySelectorAll('input[name=dates]:checked')].map(i => i.value);
+        dates = [...form.querySelectorAll('input[name=dates]:checked')].map(i => i.value);
         if (!dates.length) { toast('Aucune date cochée'); return; }
-        await q(db.from('rehearsals').insert(dates.map(date => ({ date, time: d.time, place: d.place.trim(), created_by: state.me }))));
-        toast(`${dates.length} répète${dates.length > 1 ? 's créées' : ' créée'}`);
-        go('#/repetes');
       } else {
         if (!d.date) { toast('Choisis une date'); return; }
-        const r = await q(db.from('rehearsals').insert({ date: d.date, time: d.time, place: d.place.trim(), created_by: state.me }).select('id').single());
-        go('#/repete/' + r.id);
+        dates = [d.date];
       }
+      const created = await q(db.from('rehearsals')
+        .insert(dates.map(date => ({ date, time: d.time, place, created_by: state.me }))).select('id'));
+      if (songIds.length) {
+        await q(db.from('setlist_items').insert(created.flatMap(r =>
+          songIds.map((song_id, i) => ({ rehearsal_id: r.id, song_id, position: i })))));
+      }
+      toast(`${created.length} répète${created.length > 1 ? 's créées' : ' créée'}${songIds.length ? ` avec ${songIds.length} morceau${songIds.length > 1 ? 'x' : ''}` : ''}`);
+      if (state.sheetFrom === 'calendar') afterSheet(null);
+      else afterSheet(created.length === 1 ? '#/repete/' + created[0].id : '#/repetes');
     } else if (form.dataset.form === 'editReh') {
       await q(db.from('rehearsals').update({ date: d.date, time: d.time, place: d.place.trim() }).eq('id', form.dataset.id));
       route();
     } else if (form.dataset.form === 'newSong') {
-      const s = await q(db.from('songs').insert({ title: d.title.trim() }).select('id').single());
-      go('#/morceau/' + s.id);
+      const title = (d.title || '').trim();
+      if (!title) { toast('Donne un titre au morceau'); return; }
+      const s = await q(db.from('songs').insert({ title }).select('id').single());
+      afterSheet('#/morceau/' + s.id);
     } else if (form.dataset.form === 'newMember') {
       const name = d.name.trim();
       if (name) { await q(db.from('members').insert({ name })); await loadBase(); route(); }
@@ -1375,9 +1492,14 @@ document.addEventListener('change', async e => {
 
 // ===== Aperçu de la série de répètes =====
 ['input', 'change'].forEach(evt => document.addEventListener(evt, e => {
-  if (!e.target.closest('#newReh')) return;
+  if (!e.target.closest('#sheetForm')) return;
   if (e.target.name === 'dates') updateSubmitLabel();
-  else if (['weekday', 'start', 'weeks'].includes(e.target.name)) updateSeriesPreview();
+  else if (['weekday', 'start', 'end'].includes(e.target.name)) {
+    // Si la date de début dépasse la fin, on repousse la fin de 2 mois
+    const f = document.getElementById('sheetForm');
+    if (e.target.name === 'start' && e.type === 'change' && f.elements.end.value < f.elements.start.value) f.elements.end.value = addMonths(f.elements.start.value, 2);
+    updateSeriesPreview();
+  }
 }));
 
 // ===== Recherche de morceaux =====
