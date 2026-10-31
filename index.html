@@ -503,7 +503,8 @@ function calGo(ym, dir) {
 let swipe = null;
 document.addEventListener('touchstart', e => {
   const zone = e.target.closest('#calSwipe, #rehSwipe');
-  if (!zone || e.touches.length !== 1 || e.target.closest('input, textarea, select')) { swipe = null; return; }
+  // Pas de changement de page si le doigt part de la poignée ☰ ou d'un champ
+  if (!zone || e.touches.length !== 1 || e.target.closest('.drag-handle, input, textarea, select')) { swipe = null; return; }
   swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), zone };
 }, { passive: true });
 document.addEventListener('touchend', e => {
@@ -543,17 +544,15 @@ async function viewRehearsal(id) {
   $app.innerHTML = `
     <div id="rehSwipe" data-prev="${prevR ? prevR.id : ''}" data-next="${nextR ? nextR.id : ''}">
     <a class="back" href="#/repetes">‹ Répètes</a>
-    <div class="row between" style="margin:2px 0 12px">
-      ${prevR ? `<button class="btn-sm" style="color:${dayInfo(prevR.date).color}" data-act="rehnav" data-id="${prevR.id}" data-dir="prev">‹ ${navLabel(prevR)}</button>` : '<span></span>'}
-      ${nextR ? `<button class="btn-sm" style="color:${dayInfo(nextR.date).color}" data-act="rehnav" data-id="${nextR.id}" data-dir="next">${navLabel(nextR)} ›</button>` : '<span></span>'}
-    </div>
-    <h2 class="cap">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
+    <h2 class="cap" style="margin-bottom:2px">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
+    <p class="muted small" style="margin:0 0 12px">
+      <span style="opacity:${prevR ? 1 : .25}">‹</span> glisse pour changer de répète <span style="opacity:${nextR ? 1 : .25}">›</span>
+    </p>
     <div class="row between wrap">
       <div class="row wrap" style="gap:8px">${dayChip(r.date)}<span class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</span></div>
       <button class="btn-sm" data-act="toggle" data-target="editReh">Modifier</button>
     </div>
     ${alertHtml(av)}
-    </div>
     <form id="editReh" class="card hidden" data-form="editReh" data-id="${r.id}" style="margin-top:12px">
       <label>Date</label><input type="date" name="date" required value="${esc(r.date)}">
       <label>Heure</label><input type="time" name="time" value="${esc(r.time)}">
@@ -609,6 +608,7 @@ async function viewRehearsal(id) {
     </div>
 
     <button class="btn-danger full" style="margin-top:24px" data-act="delreh" data-id="${r.id}">Supprimer cette répète</button>
+    </div>
   `;
   initSetlistSort();
   if (state.rehDir) {
@@ -831,7 +831,6 @@ const actions = {
     if (series) updateSeriesPreview(); else updateSubmitLabel();
   },
   calnav(el) { calGo(el.dataset.ym, el.dataset.dir); },
-  rehnav(el) { rehGo(el.dataset.id, el.dataset.dir); },
   async level(el) {
     await q(db.from('song_progress').upsert(
       { song_id: el.dataset.id, member: state.me, level: el.dataset.l, updated_at: new Date().toISOString() },
