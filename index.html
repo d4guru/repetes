@@ -127,6 +127,12 @@ label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 .cal-warn{position:absolute;top:1px;right:2px;font-size:11px}
 .cal-more{position:absolute;bottom:1px;right:4px;font-size:10px}
 .legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+#calSwipe{touch-action:pan-y;overflow:hidden}
+@keyframes calFromRight{from{transform:translateX(40%);opacity:0}to{transform:none;opacity:1}}
+@keyframes calFromLeft{from{transform:translateX(-40%);opacity:0}to{transform:none;opacity:1}}
+.cal-in-next{animation:calFromRight .25s ease-out}
+.cal-in-prev{animation:calFromLeft .25s ease-out}
+@media (prefers-reduced-motion: reduce){.cal-in-next,.cal-in-prev{animation:none}}
 </style>
 </head>
 <body>
@@ -456,12 +462,15 @@ async function viewCalendar(ym) {
 
   $app.innerHTML = `
     <div class="cal-head">
-      <button class="btn-icon" data-act="calnav" data-ym="${prev}" aria-label="Mois précédent">‹</button>
+      <button class="btn-icon" data-act="calnav" data-ym="${prev}" data-dir="prev" aria-label="Mois précédent">‹</button>
       <h2>${esc(first.toLocaleDateString('fr-CH', { month: 'long', year: 'numeric' }))}</h2>
-      <button class="btn-icon" data-act="calnav" data-ym="${next}" aria-label="Mois suivant">›</button>
+      <button class="btn-icon" data-act="calnav" data-ym="${next}" data-dir="next" aria-label="Mois suivant">›</button>
     </div>
-    <div class="cal-grid">${cells}</div>
-    ${ym !== today.slice(0, 7) ? `<button class="btn-sm full" style="margin-top:12px" data-act="calnav" data-ym="${today.slice(0, 7)}">Revenir à aujourd'hui</button>` : ''}
+    <div id="calSwipe" data-prev="${prev}" data-next="${next}">
+      <div class="cal-grid ${state.calDir ? 'cal-in-' + state.calDir : ''}">${cells}</div>
+    </div>
+    <p class="muted small" style="text-align:center;margin:8px 0 0">Glisse à gauche ou à droite pour changer de mois</p>
+    ${ym !== today.slice(0, 7) ? `<button class="btn-sm full" style="margin-top:12px" data-act="calnav" data-ym="${today.slice(0, 7)}" data-dir="${ym > today.slice(0, 7) ? 'prev' : 'next'}">Revenir à aujourd'hui</button>` : ''}
     <div class="legend">${WEEK_ORDER.map(i => `<span class="chip" style="background:${DAYS[i].color}2e;color:${DAYS[i].color}">${DAYS[i].name}</span>`).join('')}</div>
 
     <h3>Répètes du mois (${reh.length})</h3>
@@ -475,6 +484,32 @@ async function viewCalendar(ym) {
     }).join('') : '<div class="empty">Aucune répète ce mois-ci.</div>'}
   `;
 }
+
+// Changer de mois avec la direction de l'animation
+function calGo(ym, dir) {
+  state.calDir = dir || null;
+  go('#/calendrier/' + ym);
+  setTimeout(() => { state.calDir = null; }, 400);
+}
+
+// Glisser le doigt sur le calendrier pour changer de mois
+let swipe = null;
+document.addEventListener('touchstart', e => {
+  const zone = e.target.closest('#calSwipe');
+  if (!zone || e.touches.length !== 1) { swipe = null; return; }
+  swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), zone };
+}, { passive: true });
+document.addEventListener('touchend', e => {
+  if (!swipe) return;
+  const dx = e.changedTouches[0].clientX - swipe.x;
+  const dy = e.changedTouches[0].clientY - swipe.y;
+  const { zone, t } = swipe;
+  swipe = null;
+  // Geste nettement horizontal, assez long et assez rapide
+  if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - t > 800) return;
+  if (dx < 0) calGo(zone.dataset.next, 'next');
+  else calGo(zone.dataset.prev, 'prev');
+}, { passive: true });
 
 // ===== Détail d'une répète =====
 async function viewRehearsal(id) {
@@ -729,7 +764,7 @@ const actions = {
     document.getElementById('seriesFields').classList.toggle('hidden', !series);
     if (series) updateSeriesPreview(); else updateSubmitLabel();
   },
-  calnav(el) { go('#/calendrier/' + el.dataset.ym); },
+  calnav(el) { calGo(el.dataset.ym, el.dataset.dir); },
   async level(el) {
     await q(db.from('song_progress').upsert(
       { song_id: el.dataset.id, member: state.me, level: el.dataset.l, updated_at: new Date().toISOString() },
