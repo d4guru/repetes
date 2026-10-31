@@ -131,6 +131,12 @@ label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 .cancelled{opacity:.6}
 .cancelled .title,.cancelled .strike{text-decoration:line-through}
 .cal-cell.cancel{opacity:.45;text-decoration:line-through}
+.pill-row{margin-top:10px}
+.pill{display:inline-block;font-size:13px;font-weight:600;line-height:1.35;padding:4px 11px;border-radius:99px}
+.pill.warn{background:rgba(227,179,65,.16);color:#e9c46a}
+.pill.ok{background:rgba(63,185,107,.16);color:#5fcf88}
+.pill.no{background:rgba(229,83,75,.15);color:#ef7b74}
+.cal-pill{position:absolute;top:5px;right:5px;width:12px;height:5px;border-radius:3px;background:#e9c46a}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .cal-head h2{margin:0;text-transform:capitalize}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
@@ -139,7 +145,6 @@ label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
   border:1px solid transparent;font-size:15px;color:var(--muted)}
 .cal-cell.has{font-weight:800;font-size:16px}
 .cal-cell.today{outline:2px solid var(--text);outline-offset:-2px;color:var(--text)}
-.cal-warn{position:absolute;top:1px;right:2px;font-size:11px}
 .cal-more{position:absolute;bottom:1px;right:4px;font-size:10px}
 .legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
 #calSwipe{touch-action:pan-y;overflow:hidden}
@@ -346,13 +351,14 @@ function stateHtml(r) {
   const st = rehState(r);
   const names = esc(st.absents.join(', '));
   const abs = `absent${st.absents.length > 1 ? 's' : ''} : ${names}`;
+  const pill = (cls, txt) => `<div class="pill-row"><span class="pill ${cls}">${txt}</span></div>`;
   if (st.s === 'normal') return '';
-  if (st.s === 'maintenue') return `<div class="alert ok">✓ Maintenue${st.tooFew ? ' quand même' : ''} sans ${names}</div>`;
+  if (st.s === 'maintenue') return pill('ok', `Maintenue${st.tooFew ? ' quand même' : ''} sans ${names}`);
   if (st.s === 'annulee') return st.annul.length
-    ? `<div class="alert no">✗ Annulée · ${abs}</div>`
-    : `<div class="alert no">✗ Annulée : moins de ${MIN_PRESENT} · ${abs}</div>`;
-  if (st.s === 'attente') return `<div class="alert">⚠️ Il manque ${names} · en attente des réponses (${state.members.length - st.pending.length}/${state.members.length})</div>`;
-  return `<div class="alert">⚠️ Il manque ${names} · vote en cours (${st.maintain.length}/${st.voters.length})</div>`;
+    ? pill('no', `Annulée · ${abs}`)
+    : pill('no', `Annulée · moins de ${MIN_PRESENT} · ${abs}`);
+  if (st.s === 'attente') return pill('warn', `Il manque ${names} · En attente ${state.members.length - st.pending.length}/${state.members.length}`);
+  return pill('warn', `Il manque ${names} · Vote ${st.maintain.length}/${st.voters.length}`);
 }
 function decisionHtml(r) {
   const st = rehState(r);
@@ -647,7 +653,7 @@ async function viewCalendar(ym) {
       const warn = list.some(r => ['vote', 'attente'].includes(rehState(r).s));
       const cancel = list.every(r => rehState(r).s === 'annulee') ? ' cancel' : '';
       cells += `<a class="cal-cell has${todayCls}${cancel}" href="#/repete/${list[0].id}" style="background:${c}33;border-color:${c};color:${c}">${d}
-        ${warn ? '<span class="cal-warn">⚠️</span>' : ''}${list.length > 1 ? `<span class="cal-more">×${list.length}</span>` : ''}</a>`;
+        ${warn ? '<span class="cal-pill"></span>' : ''}${list.length > 1 ? `<span class="cal-more">×${list.length}</span>` : ''}</a>`;
     } else cells += `<div class="cal-cell${todayCls}">${d}</div>`;
   }
 
