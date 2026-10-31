@@ -3,8 +3,8 @@
 // - Garde une copie de l'app pour l'ouvrir même avec un réseau faible
 // - Les données (Supabase) ne sont jamais mises en cache : toujours en direct
 
-const CACHE = 'repetes-v1';
-const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+const CACHE = 'repetes-v2';
+const FILES = ['./', './index.html', './installer.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
