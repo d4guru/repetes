@@ -645,6 +645,9 @@ document.addEventListener('input', e => {
 });
 
 // ===== Démarrage =====
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 window.addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => {
   // Rafraîchit les données quand on revient sur l'app, sauf si un champ est en cours d'édition
