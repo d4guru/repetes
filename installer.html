@@ -91,8 +91,6 @@ button:active,.btn:active{transform:scale(.98)}
 </main>
 
 <script>
-const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
-const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
 const APP_URL = new URL('installer.html', location.href).href;
 
 const $ = id => document.getElementById(id);
@@ -100,12 +98,6 @@ function show(id) {
   ['android', 'ios', 'iosOther', 'desktop', 'done'].forEach(s => $(s).classList.toggle('hidden', s !== id));
   $('skip').classList.toggle('hidden', id === 'done');
 }
-
-// Nom du groupe
-fetch(SB_URL + '/rest/v1/settings?select=band_name&id=eq.1', { headers: { apikey: SB_KEY } })
-  .then(r => r.ok ? r.json() : [])
-  .then(rows => { if (rows[0]?.band_name) $('band').textContent = rows[0].band_name; })
-  .catch(() => {});
 
 // Service worker (nécessaire pour l'installation sur certains Chrome Android)
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
