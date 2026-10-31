@@ -30,7 +30,11 @@ header.top{position:sticky;top:0;z-index:5;background:rgba(18,18,20,.94);backdro
   display:flex;align-items:center;justify-content:space-between;gap:12px}
 header.top h1{margin:0;font-size:20px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header.top .me{font-size:14px;color:var(--muted);white-space:nowrap}
-main{padding:16px 16px calc(96px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+main{padding:16px 16px calc(160px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+.fab{position:fixed;right:max(16px, calc((100vw - 720px) / 2 + 16px));bottom:calc(78px + env(safe-area-inset-bottom));z-index:6;
+  width:58px;height:58px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.fab svg{width:26px;height:26px;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;fill:none}
 nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;background:var(--surface);
   border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
 nav.bottom a{flex:1;text-align:center;padding:10px 4px 12px;font-size:13px;color:var(--muted)}
@@ -385,8 +389,8 @@ async function viewRehearsals() {
   state.existingDates = new Set(reh.map(r => r.date));
   const nextThu = nextWeekday(today, DEFAULT_WEEKDAY);
   $app.innerHTML = `
-    <div class="row between"><h2>Répètes</h2>
-      <button class="btn-accent" data-act="toggle" data-target="newReh">+ Nouvelle</button></div>
+    <h2>Répètes</h2>
+    ${fabHtml('newReh', 'Nouvelle répète')}
     <form id="newReh" class="card hidden" data-form="newReh">
       <div class="seg">
         <button type="button" class="on" data-act="rehmode" data-mode="single">Une date</button>
@@ -411,9 +415,15 @@ async function viewRehearsals() {
         <button type="submit" class="btn-accent grow" id="newRehSubmit">Créer</button>
       </div>
     </form>
-    ${up.length ? up.map(rehCard).join('') : `<div class="empty">Aucune répète prévue.<br>Ajoute la prochaine avec « + Nouvelle ».</div>`}
+    ${up.length ? up.map(rehCard).join('') : `<div class="empty">Aucune répète prévue.<br>Ajoute la prochaine avec le bouton + en bas à droite.</div>`}
     ${past.length ? `<details><summary>Répètes passées (${past.length})</summary>${past.map(rehCard).join('')}</details>` : ''}
   `;
+}
+
+// Bouton rond flottant « + »
+function fabHtml(target, label) {
+  return `<button class="fab" data-act="openform" data-target="${target}" aria-label="${label}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`;
 }
 
 // ===== Série de répètes =====
@@ -473,16 +483,14 @@ async function viewCalendar(ym) {
   }
 
   $app.innerHTML = `
-    <div class="cal-head">
-      <button class="btn-icon" data-act="calnav" data-ym="${prev}" data-dir="prev" aria-label="Mois précédent">‹</button>
-      <h2>${esc(first.toLocaleDateString('fr-CH', { month: 'long', year: 'numeric' }))}</h2>
-      <button class="btn-icon" data-act="calnav" data-ym="${next}" data-dir="next" aria-label="Mois suivant">›</button>
+    <div class="cal-head" style="justify-content:center">
+      <h2 style="cursor:pointer" data-act="calnav" data-ym="${today.slice(0, 7)}" data-dir="${ym > today.slice(0, 7) ? 'prev' : 'next'}"
+        title="Revenir au mois en cours">${esc(first.toLocaleDateString('fr-CH', { month: 'long', year: 'numeric' }))}</h2>
     </div>
     <div id="calSwipe" data-prev="${prev}" data-next="${next}">
       <div class="cal-grid ${state.calDir ? 'cal-in-' + state.calDir : ''}">${cells}</div>
     </div>
     <p class="muted small" style="text-align:center;margin:8px 0 0">Glisse à gauche ou à droite pour changer de mois</p>
-    ${ym !== today.slice(0, 7) ? `<button class="btn-sm full" style="margin-top:12px" data-act="calnav" data-ym="${today.slice(0, 7)}" data-dir="${ym > today.slice(0, 7) ? 'prev' : 'next'}">Revenir à aujourd'hui</button>` : ''}
     <div class="legend">${WEEK_ORDER.map(i => `<span class="chip" style="background:${DAYS[i].color}2e;color:${DAYS[i].color}">${DAYS[i].name}</span>`).join('')}</div>
 
     <h3>Répètes du mois (${reh.length})</h3>
@@ -660,8 +668,8 @@ async function viewSongs() {
   songs.forEach(s => { s.status = songStatus(s.song_progress); });
   const groups = ['en-cours', 'a-apprendre', 'pret'];
   $app.innerHTML = `
-    <div class="row between"><h2>Morceaux</h2>
-      <button class="btn-accent" data-act="toggle" data-target="newSong">+ Nouveau</button></div>
+    <h2>Morceaux</h2>
+    ${fabHtml('newSong', 'Nouveau morceau')}
     <form id="newSong" class="card hidden" data-form="newSong">
       <label style="margin-top:0">Titre</label><input type="text" name="title" required placeholder="Titre du morceau">
       <div class="row" style="margin-top:14px">
@@ -678,7 +686,7 @@ async function viewSongs() {
           <div class="row between"><span class="title grow" style="font-size:17px">${esc(s.title)}</span><span class="muted">›</span></div>
           ${dotsHtml(s.song_progress)}
         </a>`).join('');
-    }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec « + Nouveau ».</div>`}
+    }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec le bouton + en bas à droite.</div>`}
   `;
 }
 
@@ -825,6 +833,14 @@ const actions = {
     await q(db.from('setlist_items').delete().eq('rehearsal_id', el.dataset.id));
     toast('Setlist vidée');
     route();
+  },
+  openform(el) {
+    const f = document.getElementById(el.dataset.target);
+    if (!f) return;
+    f.classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const first = f.querySelector('input[type=text], input[type=date]');
+    if (first && f.id === 'newSong') setTimeout(() => first.focus(), 300);
   },
   rehmode(el) {
     const f = document.getElementById('newReh');
