@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121214">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Répètes">
+<title>Répètes</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23121214'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle' fill='%23e8643a' font-family='Arial' font-weight='bold'%3ER%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#121214; --surface:#1c1c21; --surface2:#26262d; --border:#34343d;
+  --text:#f2f2f4; --muted:#a6a6b0; --accent:#e8643a; --accent-text:#fff;
+  --yes:#3fb96b; --maybe:#e3b341; --no:#e5534b;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:17px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+a{color:inherit;text-decoration:none}
+header.top{position:sticky;top:0;z-index:5;background:rgba(18,18,20,.94);backdrop-filter:blur(8px);
+  padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:12px}
+header.top h1{margin:0;font-size:20px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header.top .me{font-size:14px;color:var(--muted);white-space:nowrap}
+main{padding:16px 16px calc(96px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;background:var(--surface);
+  border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
+nav.bottom a{flex:1;text-align:center;padding:10px 4px 12px;font-size:13px;color:var(--muted)}
+nav.bottom a .ico{display:block;font-size:22px;line-height:1.2}
+nav.bottom a.on{color:var(--accent);font-weight:600}
+h2{font-size:22px;margin:4px 0 14px}
+h3{font-size:15px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:26px 0 10px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px}
+.between{justify-content:space-between}
+.wrap{flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.title{font-weight:650;font-size:18px}
+.cap::first-letter{text-transform:uppercase}
+button,.btn{font:inherit;font-size:16px;min-height:44px;padding:8px 16px;border-radius:11px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);cursor:pointer}
+button:active{transform:scale(.98)}
+.btn-accent{background:var(--accent);border-color:var(--accent);color:var(--accent-text);font-weight:600}
+.btn-ghost{background:transparent}
+.btn-danger{background:transparent;border-color:var(--no);color:var(--no)}
+.btn-sm{min-height:36px;padding:4px 12px;font-size:15px}
+.btn-icon{min-width:44px;padding:0 10px}
+.full{width:100%}
+input,select,textarea{font:inherit;font-size:16px;width:100%;color:var(--text);background:var(--bg);
+  border:1px solid var(--border);border-radius:11px;padding:11px 12px}
+textarea{min-height:110px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+label{display:block;font-size:14px;color:var(--muted);margin:12px 0 6px}
+.mono,textarea.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:14px;line-height:1.35}
+pre.mono{white-space:pre;overflow-x:auto;margin:0;background:var(--bg);border:1px solid var(--border);
+  border-radius:11px;padding:12px;-webkit-overflow-scrolling:touch}
+pre.lyrics{white-space:pre-wrap;font-family:inherit;margin:0;background:var(--bg);border:1px solid var(--border);border-radius:11px;padding:12px}
+.vote{display:flex;gap:8px}
+.vote button{flex:1;min-height:44px;padding:6px 4px;font-size:15px;background:var(--bg)}
+.vote button.yes.on{background:var(--yes);border-color:var(--yes);color:#06210f;font-weight:700}
+.vote button.maybe.on{background:var(--maybe);border-color:var(--maybe);color:#2a1f02;font-weight:700}
+.vote button.no.on{background:var(--no);border-color:var(--no);color:#2a0705;font-weight:700}
+.chip{display:inline-block;font-size:13px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.chip.yes{background:rgba(63,185,107,.18);color:var(--yes)}
+.chip.maybe{background:rgba(227,179,65,.18);color:var(--maybe)}
+.chip.no{background:rgba(229,83,75,.18);color:var(--no)}
+.chip.pret{background:rgba(63,185,107,.18);color:var(--yes)}
+.chip.en-cours{background:rgba(227,179,65,.18);color:var(--maybe)}
+.chip.a-apprendre{background:rgba(166,166,176,.15);color:var(--muted)}
+.counts{display:flex;gap:6px;flex-wrap:wrap}
+.member-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.member-row:last-child{border-bottom:0}
+.set-item{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:10px}
+.set-num{width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.set-item textarea{min-height:60px;margin-top:8px;font-size:15px}
+details summary{cursor:pointer;color:var(--muted);padding:10px 0;font-weight:600}
+.empty{color:var(--muted);text-align:center;padding:24px 8px}
+.back{display:inline-block;color:var(--muted);margin-bottom:8px;padding:6px 0}
+.hidden{display:none!important}
+#toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:20;background:#2d2d35;color:var(--text);
+  border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
+#toast.show{opacity:1;transform:none}
+.picker{max-width:420px;margin:40px auto 0;text-align:center}
+.picker button{width:100%;margin-bottom:10px;font-size:18px;min-height:54px}
+.loading{color:var(--muted);text-align:center;padding:40px 0}
+.history-item{padding:10px 0;border-bottom:1px solid var(--border)}
+.history-item:last-child{border-bottom:0}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 id="bandName">…</h1>
+  <a href="#/reglages" class="me" id="meLabel"></a>
+</header>
+<main id="app"><div class="loading">Chargement…</div></main>
+<nav class="bottom" id="nav">
+  <a href="#/repetes" data-tab="repetes"><span class="ico">📅</span>Répètes</a>
+  <a href="#/morceaux" data-tab="morceaux"><span class="ico">🎸</span>Morceaux</a>
+  <a href="#/reglages" data-tab="reglages"><span class="ico">⚙️</span>Réglages</a>
+</nav>
+<div id="toast"></div>
+
+<script>
+// ===== Configuration Supabase =====
+const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
+const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
+const db = supabase.createClient(SB_URL, SB_KEY);
+
+// ===== Constantes =====
+const VOTES = [
+  { key: 'oui', label: 'Oui', cls: 'yes' },
+  { key: 'peut-etre', label: 'Peut-être', cls: 'maybe' },
+  { key: 'non', label: 'Non', cls: 'no' },
+];
+const VOTE_BY_KEY = Object.fromEntries(VOTES.map(v => [v.key, v]));
+const SONG_STATUS = { 'a-apprendre': 'À apprendre', 'en-cours': 'En cours', 'pret': 'Prêt' };
+
+const state = { band: 'Mon groupe', members: [], me: null };
+const $app = document.getElementById('app');
+
+// ===== Utilitaires =====
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function getMe() { try { return localStorage.getItem('repetes_me'); } catch (e) { return null; } }
+function setMe(v) { try { if (v) localStorage.setItem('repetes_me', v); else localStorage.removeItem('repetes_me'); } catch (e) {} state.me = v; }
+function todayISO() { return new Date().toLocaleDateString('sv-SE'); }
+function fmtDate(d, opts) {
+  return new Date(d + 'T12:00:00').toLocaleDateString('fr-CH', opts || { weekday: 'long', day: 'numeric', month: 'long' });
+}
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+async function q(builder) {
+  const { data, error } = await builder;
+  if (error) { console.error(error); toast('Erreur : ' + error.message); throw error; }
+  return data;
+}
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+
+// ===== Chargement initial =====
+async function loadBase() {
+  const [settings, members] = await Promise.all([
+    q(db.from('settings').select('band_name').eq('id', 1).maybeSingle()),
+    q(db.from('members').select('name').order('id')),
+  ]);
+  state.band = settings?.band_name || 'Mon groupe';
+  state.members = members.map(m => m.name);
+  state.me = getMe();
+  if (state.me && !state.members.includes(state.me)) setMe(null);
+  document.getElementById('bandName').textContent = state.band;
+  document.title = state.band + ' · Répètes';
+  document.getElementById('meLabel').textContent = state.me ? '👤 ' + state.me : '';
+}
+
+// ===== Routage =====
+async function route() {
+  const parts = (location.hash.replace(/^#\/?/, '') || 'repetes').split('/');
+  const [view, id] = parts;
+  document.querySelectorAll('#nav a').forEach(a => {
+    const t = a.dataset.tab;
+    a.classList.toggle('on', t === view || (t === 'repetes' && view === 'repete') || (t === 'morceaux' && view === 'morceau'));
+  });
+  if (!state.me) return viewPicker();
+  try {
+    if (view === 'repete' && id) await viewRehearsal(id);
+    else if (view === 'morceaux') await viewSongs();
+    else if (view === 'morceau' && id) await viewSong(id);
+    else if (view === 'reglages') await viewSettings();
+    else await viewRehearsals();
+  } catch (e) {
+    $app.innerHTML = `<div class="empty">Impossible de charger les données.<br><br><button onclick="route()">Réessayer</button></div>`;
+  }
+}
+
+// ===== Choix du membre =====
+function viewPicker() {
+  $app.innerHTML = `
+    <div class="picker">
+      <h2>Qui es-tu ?</h2>
+      <p class="muted">Choisis ton nom. Il sera mémorisé sur ce téléphone.</p>
+      ${state.members.map(m => `<button data-act="pick" data-name="${esc(m)}">${esc(m)}</button>`).join('')}
+    </div>`;
+}
+
+// ===== Liste des répètes =====
+function voteButtons(rid, current) {
+  return `<div class="vote">${VOTES.map(v =>
+    `<button class="${v.cls} ${current === v.key ? 'on' : ''}" data-act="vote" data-id="${rid}" data-s="${v.key}">${v.label}</button>`
+  ).join('')}</div>`;
+}
+function countsHtml(av) {
+  const c = { oui: 0, 'peut-etre': 0, non: 0 };
+  av.forEach(a => { if (c[a.status] !== undefined) c[a.status]++; });
+  const missing = state.members.filter(m => !av.some(a => a.member === m)).length;
+  return `<div class="counts">
+    <span class="chip yes">✓ ${c.oui}</span>
+    <span class="chip maybe">? ${c['peut-etre']}</span>
+    <span class="chip no">✗ ${c.non}</span>
+    ${missing ? `<span class="chip">${missing} sans réponse</span>` : ''}
+  </div>`;
+}
+function rehCard(r) {
+  const mine = (r.availability || []).find(a => a.member === state.me);
+  return `<div class="card">
+    <a href="#/repete/${r.id}" style="display:block">
+      <div class="row between" style="align-items:flex-start">
+        <div class="grow">
+          <div class="title cap">${esc(fmtDate(r.date))}</div>
+          <div class="muted small">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</div>
+        </div>
+        <span class="muted">›</span>
+      </div>
+      <div style="margin:10px 0">${countsHtml(r.availability || [])}</div>
+    </a>
+    ${voteButtons(r.id, mine?.status)}
+  </div>`;
+}
+async function viewRehearsals() {
+  const reh = await q(db.from('rehearsals').select('*, availability(member,status)')
+    .order('date', { ascending: true }).order('time', { ascending: true }));
+  const today = todayISO();
+  const up = reh.filter(r => r.date >= today);
+  const past = reh.filter(r => r.date < today).reverse();
+  const lastPlace = [...reh].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]?.place || '';
+  $app.innerHTML = `
+    <div class="row between"><h2>Répètes</h2>
+      <button class="btn-accent" data-act="toggle" data-target="newReh">+ Nouvelle</button></div>
+    <form id="newReh" class="card hidden" data-form="newReh">
+      <label>Date</label><input type="date" name="date" required value="${today}">
+      <label>Heure</label><input type="time" name="time" value="19:30">
+      <label>Lieu</label><input type="text" name="place" value="${esc(lastPlace)}" placeholder="Local de répète">
+      <div class="row" style="margin-top:14px">
+        <button type="button" class="btn-ghost grow" data-act="toggle" data-target="newReh">Annuler</button>
+        <button type="submit" class="btn-accent grow">Créer</button>
+      </div>
+    </form>
+    ${up.length ? up.map(rehCard).join('') : `<div class="empty">Aucune répète prévue.<br>Ajoute la prochaine avec « + Nouvelle ».</div>`}
+    ${past.length ? `<details><summary>Répètes passées (${past.length})</summary>${past.map(rehCard).join('')}</details>` : ''}
+  `;
+}
+
+// ===== Détail d'une répète =====
+async function viewRehearsal(id) {
+  const [r, songs] = await Promise.all([
+    q(db.from('rehearsals').select('*, availability(member,status), setlist_items(id,position,note,song_id,songs(title,status))').eq('id', id).maybeSingle()),
+    q(db.from('songs').select('id,title').order('title')),
+  ]);
+  if (!r) { $app.innerHTML = `<div class="empty">Cette répète n'existe plus.<br><br><a class="btn" href="#/repetes">Retour</a></div>`; return; }
+  const av = r.availability || [];
+  const items = (r.setlist_items || []).sort((a, b) => a.position - b.position);
+  const inSet = new Set(items.map(i => i.song_id));
+  const available = songs.filter(s => !inSet.has(s.id));
+  const mine = av.find(a => a.member === state.me);
+
+  $app.innerHTML = `
+    <a class="back" href="#/repetes">‹ Répètes</a>
+    <h2 class="cap">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
+    <div class="row between wrap">
+      <div class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</div>
+      <button class="btn-sm" data-act="toggle" data-target="editReh">Modifier</button>
+    </div>
+    <form id="editReh" class="card hidden" data-form="editReh" data-id="${r.id}" style="margin-top:12px">
+      <label>Date</label><input type="date" name="date" required value="${esc(r.date)}">
+      <label>Heure</label><input type="time" name="time" value="${esc(r.time)}">
+      <label>Lieu</label><input type="text" name="place" value="${esc(r.place)}">
+      <div class="row" style="margin-top:14px">
+        <button type="button" class="btn-ghost grow" data-act="toggle" data-target="editReh">Annuler</button>
+        <button type="submit" class="btn-accent grow">Enregistrer</button>
+      </div>
+    </form>
+
+    <h3>Ma dispo</h3>
+    ${voteButtons(r.id, mine?.status)}
+
+    <h3>Dispos du groupe</h3>
+    <div class="card">
+      ${state.members.map(m => {
+        const a = av.find(x => x.member === m);
+        const v = a ? VOTE_BY_KEY[a.status] : null;
+        return `<div class="member-row"><span>${esc(m)}${m === state.me ? ' <span class="muted small">(toi)</span>' : ''}</span>
+          ${v ? `<span class="chip ${v.cls}">${v.label}</span>` : `<span class="chip">Pas répondu</span>`}</div>`;
+      }).join('')}
+    </div>
+
+    <h3>Setlist (${items.length})</h3>
+    ${items.length ? items.map((it, i) => `
+      <div class="set-item">
+        <div class="row">
+          <span class="set-num">${i + 1}</span>
+          <a class="grow title" style="font-size:16px" href="#/morceau/${it.song_id}">${esc(it.songs?.title || '(morceau supprimé)')}</a>
+          <button class="btn-sm btn-icon" data-act="move" data-id="${it.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Monter">↑</button>
+          <button class="btn-sm btn-icon" data-act="move" data-id="${it.id}" data-dir="1" ${i === items.length - 1 ? 'disabled' : ''} aria-label="Descendre">↓</button>
+          <button class="btn-sm btn-icon btn-ghost" data-act="unset" data-id="${it.id}" aria-label="Retirer">✕</button>
+        </div>
+        <textarea data-change="itemnote" data-id="${it.id}" placeholder="Note sur ce morceau pour cette répète (enregistré automatiquement)">${esc(it.note)}</textarea>
+      </div>`).join('') : `<div class="empty">Pas encore de morceaux prévus.</div>`}
+    ${available.length ? `
+      <div class="row" style="margin-top:6px">
+        <select id="addSong" class="grow">${available.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}</select>
+        <button class="btn-accent" data-act="addset" data-id="${r.id}" data-next="${items.length ? items[items.length - 1].position + 1 : 0}">Ajouter</button>
+      </div>` : (songs.length ? '' : `<div class="muted small">Ajoute d'abord des morceaux dans l'onglet Morceaux.</div>`)}
+
+    <h3>Bilan de la répète</h3>
+    <div class="card">
+      <label style="margin-top:0">✅ Ce qu'on a travaillé</label>
+      <textarea id="doneNotes">${esc(r.done_notes)}</textarea>
+      <label>🔧 Ce qui reste à bosser</label>
+      <textarea id="todoNotes">${esc(r.todo_notes)}</textarea>
+      <button class="btn-accent full" style="margin-top:12px" data-act="savenotes" data-id="${r.id}">Enregistrer le bilan</button>
+    </div>
+
+    <button class="btn-danger full" style="margin-top:24px" data-act="delreh" data-id="${r.id}">Supprimer cette répète</button>
+  `;
+}
+
+// ===== Liste des morceaux =====
+async function viewSongs() {
+  const songs = await q(db.from('songs').select('id,title,status').order('title'));
+  const groups = ['en-cours', 'a-apprendre', 'pret'];
+  $app.innerHTML = `
+    <div class="row between"><h2>Morceaux</h2>
+      <button class="btn-accent" data-act="toggle" data-target="newSong">+ Nouveau</button></div>
+    <form id="newSong" class="card hidden" data-form="newSong">
+      <label style="margin-top:0">Titre</label><input type="text" name="title" required placeholder="Titre du morceau">
+      <label>Statut</label>
+      <select name="status">${Object.entries(SONG_STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+      <div class="row" style="margin-top:14px">
+        <button type="button" class="btn-ghost grow" data-act="toggle" data-target="newSong">Annuler</button>
+        <button type="submit" class="btn-accent grow">Ajouter</button>
+      </div>
+    </form>
+    ${songs.length > 5 ? `<input type="search" id="songSearch" placeholder="Rechercher un morceau…" style="margin-bottom:14px">` : ''}
+    ${songs.length ? groups.map(g => {
+      const list = songs.filter(s => s.status === g);
+      if (!list.length) return '';
+      return `<h3>${SONG_STATUS[g]} (${list.length})</h3>` + list.map(s => `
+        <a class="card row between song-link" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
+          <span class="title grow" style="font-size:17px">${esc(s.title)}</span><span class="muted">›</span>
+        </a>`).join('');
+    }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec « + Nouveau ».</div>`}
+  `;
+}
+
+// ===== Détail d'un morceau =====
+function fieldBlock(song, field, label, cls) {
+  const val = song[field] || '';
+  return `
+    <div class="row between" style="margin-top:22px"><h3 style="margin:0">${label}</h3>
+      <button class="btn-sm" data-act="toggle" data-target="edit-${field}" data-hide="show-${field}">Modifier</button></div>
+    <div id="show-${field}" style="margin-top:10px">
+      ${val ? `<pre class="${cls}">${esc(val)}</pre>` : `<div class="muted small">Rien pour l'instant.</div>`}
+    </div>
+    <div id="edit-${field}" class="hidden" style="margin-top:10px">
+      <textarea id="ta-${field}" class="${cls === 'mono' ? 'mono' : ''}" style="min-height:${cls === 'mono' ? 260 : 180}px" spellcheck="false">${esc(val)}</textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn-ghost grow" data-act="toggle" data-target="edit-${field}" data-hide="show-${field}">Annuler</button>
+        <button class="btn-accent grow" data-act="savefield" data-id="${song.id}" data-field="${field}">Enregistrer</button>
+      </div>
+    </div>`;
+}
+async function viewSong(id) {
+  const [song, hist] = await Promise.all([
+    q(db.from('songs').select('*').eq('id', id).maybeSingle()),
+    q(db.from('setlist_items').select('note, rehearsal_id, rehearsals(date)').eq('song_id', id)),
+  ]);
+  if (!song) { $app.innerHTML = `<div class="empty">Ce morceau n'existe plus.<br><br><a class="btn" href="#/morceaux">Retour</a></div>`; return; }
+  const history = hist.filter(h => h.rehearsals).sort((a, b) => b.rehearsals.date.localeCompare(a.rehearsals.date));
+  $app.innerHTML = `
+    <a class="back" href="#/morceaux">‹ Morceaux</a>
+    <div class="row between" style="align-items:flex-start">
+      <h2 class="grow" id="songTitle">${esc(song.title)}</h2>
+      <button class="btn-sm" data-act="rename" data-id="${song.id}">Renommer</button>
+    </div>
+    <label style="margin-top:0">Statut</label>
+    <select data-change="songstatus" data-id="${song.id}">
+      ${Object.entries(SONG_STATUS).map(([k, v]) => `<option value="${k}" ${song.status === k ? 'selected' : ''}>${v}</option>`).join('')}
+    </select>
+    ${fieldBlock(song, 'tabs', 'Tabs', 'mono')}
+    ${fieldBlock(song, 'lyrics', 'Paroles', 'lyrics')}
+    ${fieldBlock(song, 'notes', 'Notes', 'lyrics')}
+
+    <h3>Historique en répète (${history.length})</h3>
+    <div class="card">
+      ${history.length ? history.map(h => `
+        <a class="history-item" style="display:block" href="#/repete/${h.rehearsal_id}">
+          <div class="cap small muted">${esc(fmtDate(h.rehearsals.date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}</div>
+          <div>${h.note ? esc(h.note) : '<span class="muted small">Pas de note</span>'}</div>
+        </a>`).join('') : `<div class="muted small">Ce morceau n'a encore été dans aucune setlist.</div>`}
+    </div>
+
+    <button class="btn-danger full" style="margin-top:24px" data-act="delsong" data-id="${song.id}">Supprimer ce morceau</button>
+  `;
+}
+
+// ===== Réglages =====
+async function viewSettings() {
+  await loadBase();
+  $app.innerHTML = `
+    <h2>Réglages</h2>
+    <h3>Nom du groupe</h3>
+    <div class="card">
+      <input type="text" id="bandInput" value="${esc(state.band)}">
+      <button class="btn-accent full" style="margin-top:10px" data-act="saveband">Enregistrer</button>
+    </div>
+    <h3>Moi</h3>
+    <div class="card row between">
+      <span>Tu es <strong>${esc(state.me)}</strong></span>
+      <button class="btn-sm" data-act="changeme">Changer</button>
+    </div>
+    <h3>Membres (${state.members.length})</h3>
+    <div class="card">
+      ${state.members.map(m => `<div class="member-row"><span>${esc(m)}</span>
+        <button class="btn-sm btn-ghost" data-act="delmember" data-name="${esc(m)}" aria-label="Retirer ${esc(m)}">Retirer</button></div>`).join('')}
+      <form class="row" style="margin-top:12px" data-form="newMember">
+        <input type="text" name="name" required placeholder="Nouveau membre" class="grow">
+        <button type="submit" class="btn-accent">Ajouter</button>
+      </form>
+    </div>
+    <p class="muted small" style="margin-top:24px">Astuce : ajoute l'app à l'écran d'accueil de ton téléphone (menu Partager › « Sur l'écran d'accueil » sur iPhone, menu ⋮ › « Ajouter à l'écran d'accueil » sur Android).</p>
+  `;
+}
+
+// ===== Actions (clics) =====
+const actions = {
+  async pick(el) { setMe(el.dataset.name); document.getElementById('meLabel').textContent = '👤 ' + state.me; route(); },
+  toggle(el) {
+    document.getElementById(el.dataset.target)?.classList.toggle('hidden');
+    if (el.dataset.hide) document.getElementById(el.dataset.hide)?.classList.toggle('hidden');
+  },
+  async vote(el) {
+    await q(db.from('availability').upsert(
+      { rehearsal_id: el.dataset.id, member: state.me, status: el.dataset.s, updated_at: new Date().toISOString() },
+      { onConflict: 'rehearsal_id,member' }));
+    route();
+  },
+  async addset(el) {
+    const sel = document.getElementById('addSong');
+    if (!sel?.value) return;
+    await q(db.from('setlist_items').insert({ rehearsal_id: el.dataset.id, song_id: sel.value, position: Number(el.dataset.next) }));
+    route();
+  },
+  async unset(el) {
+    await q(db.from('setlist_items').delete().eq('id', el.dataset.id));
+    route();
+  },
+  async move(el) {
+    const rid = location.hash.split('/')[2];
+    const items = await q(db.from('setlist_items').select('id,position').eq('rehearsal_id', rid).order('position'));
+    const i = items.findIndex(x => x.id === el.dataset.id);
+    const j = i + Number(el.dataset.dir);
+    if (i < 0 || j < 0 || j >= items.length) return;
+    [items[i], items[j]] = [items[j], items[i]];
+    await Promise.all(items.map((it, idx) => it.position === idx ? null : q(db.from('setlist_items').update({ position: idx }).eq('id', it.id))));
+    route();
+  },
+  async savenotes(el) {
+    await q(db.from('rehearsals').update({
+      done_notes: document.getElementById('doneNotes').value,
+      todo_notes: document.getElementById('todoNotes').value,
+    }).eq('id', el.dataset.id));
+    toast('Bilan enregistré');
+  },
+  async delreh(el) {
+    if (!confirm('Supprimer cette répète, ses dispos et sa setlist ?')) return;
+    await q(db.from('rehearsals').delete().eq('id', el.dataset.id));
+    go('#/repetes');
+  },
+  async savefield(el) {
+    const f = el.dataset.field;
+    await q(db.from('songs').update({ [f]: document.getElementById('ta-' + f).value }).eq('id', el.dataset.id));
+    toast('Enregistré');
+    route();
+  },
+  async rename(el) {
+    const cur = document.getElementById('songTitle').textContent;
+    const t = prompt('Nouveau titre', cur);
+    if (!t || !t.trim() || t.trim() === cur) return;
+    await q(db.from('songs').update({ title: t.trim() }).eq('id', el.dataset.id));
+    route();
+  },
+  async delsong(el) {
+    if (!confirm('Supprimer ce morceau ? Il sera aussi retiré des setlists.')) return;
+    await q(db.from('songs').delete().eq('id', el.dataset.id));
+    go('#/morceaux');
+  },
+  async saveband() {
+    const name = document.getElementById('bandInput').value.trim();
+    if (!name) return;
+    await q(db.from('settings').upsert({ id: 1, band_name: name }));
+    await loadBase();
+    toast('Nom du groupe enregistré');
+  },
+  changeme() { setMe(null); document.getElementById('meLabel').textContent = ''; viewPicker(); },
+  async delmember(el) {
+    const n = el.dataset.name;
+    if (!confirm(`Retirer ${n} du groupe ?`)) return;
+    await q(db.from('members').delete().eq('name', n));
+    if (n === state.me) setMe(null);
+    await loadBase();
+    route();
+  },
+};
+
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  e.preventDefault();
+  const fn = actions[el.dataset.act];
+  if (!fn || el.disabled) return;
+  el.disabled = true;
+  try { await fn(el); } catch (err) {} finally { if (el.isConnected) el.disabled = false; }
+});
+
+// ===== Formulaires =====
+document.addEventListener('submit', async e => {
+  const form = e.target.closest('[data-form]');
+  if (!form) return;
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(form));
+  const btn = form.querySelector('[type=submit]'); if (btn) btn.disabled = true;
+  try {
+    if (form.dataset.form === 'newReh') {
+      const r = await q(db.from('rehearsals').insert({ date: d.date, time: d.time, place: d.place.trim(), created_by: state.me }).select('id').single());
+      go('#/repete/' + r.id);
+    } else if (form.dataset.form === 'editReh') {
+      await q(db.from('rehearsals').update({ date: d.date, time: d.time, place: d.place.trim() }).eq('id', form.dataset.id));
+      route();
+    } else if (form.dataset.form === 'newSong') {
+      const s = await q(db.from('songs').insert({ title: d.title.trim(), status: d.status }).select('id').single());
+      go('#/morceau/' + s.id);
+    } else if (form.dataset.form === 'newMember') {
+      const name = d.name.trim();
+      if (name) { await q(db.from('members').insert({ name })); await loadBase(); route(); }
+    }
+  } catch (err) {} finally { if (btn && btn.isConnected) btn.disabled = false; }
+});
+
+// ===== Champs enregistrés automatiquement =====
+document.addEventListener('change', async e => {
+  const el = e.target.closest('[data-change]');
+  if (!el) return;
+  try {
+    if (el.dataset.change === 'itemnote') {
+      await q(db.from('setlist_items').update({ note: el.value }).eq('id', el.dataset.id));
+      toast('Note enregistrée');
+    } else if (el.dataset.change === 'songstatus') {
+      await q(db.from('songs').update({ status: el.value }).eq('id', el.dataset.id));
+      toast('Statut mis à jour');
+    }
+  } catch (err) {}
+});
+
+// ===== Recherche de morceaux =====
+document.addEventListener('input', e => {
+  if (e.target.id !== 'songSearch') return;
+  const term = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('.song-link').forEach(a => a.classList.toggle('hidden', !!term && !a.dataset.title.includes(term)));
+});
+
+// ===== Démarrage =====
+window.addEventListener('hashchange', route);
+document.addEventListener('visibilitychange', () => {
+  // Rafraîchit les données quand on revient sur l'app, sauf si un champ est en cours d'édition
+  if (document.visibilityState === 'visible' && !document.querySelector('textarea:focus, input:focus')) loadBase().then(route).catch(() => {});
+});
+(async () => {
+  try { await loadBase(); }
+  catch (e) {
+    $app.innerHTML = `<div class="empty">Connexion à la base impossible.<br>Vérifie que le script setup.sql a bien été exécuté dans Supabase.<br><br><button onclick="location.reload()">Réessayer</button></div>`;
+    return;
+  }
+  route();
+})();
+</script>
+</body>
+</html>
