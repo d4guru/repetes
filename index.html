@@ -161,7 +161,11 @@ body.sheet-open{overflow:hidden}
 .cal-more{position:absolute;bottom:1px;right:4px;font-size:10px}
 .legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
 #calSwipe{touch-action:pan-y;overflow:hidden}
-#rehSwipe{touch-action:pan-y}
+.swipe-vp{position:relative;overflow:hidden;touch-action:pan-y;margin:0 -16px;padding:0 16px}
+.swipe-track{position:relative;will-change:transform}
+.pane-side{position:absolute;top:0;width:100%}
+.pane-prev{left:calc(-100% - 32px)}
+.pane-next{left:calc(100% + 32px)}
 .thumb{flex:none;border-radius:8px;object-fit:cover;background:var(--surface2)}
 .thumb.ph{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700;font-size:16px;border:1px solid var(--border)}
 .cover-big{display:block;width:100%;max-width:320px;aspect-ratio:1;object-fit:cover;border-radius:14px;margin:4px auto 10px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
@@ -735,19 +739,11 @@ function updateSubmitLabel() {
 }
 
 // ===== Calendrier =====
-async function viewCalendar(ym) {
-  const today = todayISO();
-  if (!/^\d{4}-\d{2}$/.test(ym || '')) ym = today.slice(0, 7);
+// Une page du calendrier (titre + grille) pour un mois donné
+function monthPane(ym, byDate, today, isCurrent) {
   const [y, m] = ym.split('-').map(Number);
   const first = new Date(y, m - 1, 1, 12), last = new Date(y, m, 0, 12);
-  const reh = await q(db.from('rehearsals').select('id,date,time,place,availability(member,status),rehearsal_votes(member,vote)')
-    .gte('date', isoOf(first)).lte('date', isoOf(last)).order('date').order('time'));
-  const byDate = {};
-  reh.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
-  const prev = isoOf(new Date(y, m - 2, 1, 12)).slice(0, 7);
-  const next = isoOf(new Date(y, m, 1, 12)).slice(0, 7);
   const offset = (first.getDay() + 6) % 7; // semaine commençant le lundi
-
   let cells = WEEK_ORDER.map(i => `<div class="cal-dow" style="color:${DAYS[i].color}">${DAYS[i].short}</div>`).join('');
   for (let i = 0; i < offset; i++) cells += '<div></div>';
   for (let d = 1; d <= last.getDate(); d++) {
@@ -765,15 +761,30 @@ async function viewCalendar(ym) {
       cells += `<div class="cal-cell empty-day${todayCls}" data-act="newreh" data-date="${iso}">${d}</div>`;
     } else cells += `<div class="cal-cell${todayCls}">${d}</div>`;
   }
-
-  $app.innerHTML = `
+  return `
     <div class="cal-head" style="justify-content:center">
       <h2 style="cursor:pointer" data-act="calnav" data-ym="${today.slice(0, 7)}" data-dir="${ym > today.slice(0, 7) ? 'prev' : 'next'}"
         title="Revenir au mois en cours">${esc(first.toLocaleDateString('fr-CH', { month: 'long', year: 'numeric' }))}</h2>
     </div>
-    <div id="calSwipe" data-prev="${prev}" data-next="${next}">
-      <div class="cal-grid ${state.calDir ? 'cal-in-' + state.calDir : ''}">${cells}</div>
-    </div>
+    <div class="cal-grid ${isCurrent && state.calDir ? 'cal-in-' + state.calDir : ''}">${cells}</div>`;
+}
+
+async function viewCalendar(ym) {
+  const today = todayISO();
+  if (!/^\d{4}-\d{2}$/.test(ym || '')) ym = today.slice(0, 7);
+  const [y, m] = ym.split('-').map(Number);
+  const prev = isoOf(new Date(y, m - 2, 1, 12)).slice(0, 7);
+  const next = isoOf(new Date(y, m, 1, 12)).slice(0, 7);
+  // On charge 3 mois d'un coup : le précédent et le suivant s'affichent pendant le glisser
+  const from = isoOf(new Date(y, m - 2, 1, 12)), to = isoOf(new Date(y, m + 1, 0, 12));
+  const all = await q(db.from('rehearsals').select('id,date,time,place,availability(member,status),rehearsal_votes(member,vote)')
+    .gte('date', from).lte('date', to).order('date').order('time'));
+  const byDate = {};
+  all.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
+  const reh = all.filter(r => r.date.startsWith(ym));
+
+  $app.innerHTML = `
+    ${swipeFrame('cal', prev, next, monthPane(prev, byDate, today), monthPane(ym, byDate, today, true), monthPane(next, byDate, today))}
     <p class="muted small" style="text-align:center;margin:8px 0 0">Glisse pour changer de mois · touche un jour libre pour créer une répète</p>
     <div class="legend">${WEEK_ORDER.map(i => `<span class="chip" style="background:${DAYS[i].color}2e;color:${DAYS[i].color}">${DAYS[i].name}</span>`).join('')}</div>
 
@@ -787,64 +798,131 @@ async function viewCalendar(ym) {
       </a>`;
     }).join('') : '<div class="empty">Aucune répète ce mois-ci.</div>'}
   `;
+  neutralizeSides();
 }
 
-// Changer de mois avec la direction de l'animation
+// Changer de mois avec la direction de l'animation (appui sur le nom du mois)
 function calGo(ym, dir) {
   state.calDir = dir || null;
   go('#/calendrier/' + ym);
   setTimeout(() => { state.calDir = null; }, 400);
 }
 
-// Glisser le doigt sur le calendrier pour changer de mois
-let swipe = null;
+// ===== Glisser « qui suit le doigt » (calendrier et fiches de répète) =====
+// Trois pages côte à côte : précédente, actuelle, suivante. La page actuelle suit le doigt
+// et la voisine arrive collée à elle. Au lâcher : on change de page ou on revient en place.
+const SWIPE_GAP = 32; // espace entre deux pages pendant le glisser
+
+function swipeFrame(kind, prevKey, nextKey, prevHtml, curHtml, nextHtml) {
+  return `<div class="swipe-vp" data-kind="${kind}" data-prev="${prevKey || ''}" data-next="${nextKey || ''}">
+    <div class="swipe-track">
+      ${prevKey ? `<div class="pane pane-side pane-prev" inert aria-hidden="true">${prevHtml}</div>` : ''}
+      <div class="pane pane-cur">${curHtml}</div>
+      ${nextKey ? `<div class="pane pane-side pane-next" inert aria-hidden="true">${nextHtml}</div>` : ''}
+    </div>
+  </div>`;
+}
+// Les pages voisines ne servent qu'à l'affichage : on retire identifiants et actions
+// pour qu'elles n'interfèrent jamais avec la page actuelle
+function neutralizeSides() {
+  $app.querySelectorAll('.pane-side [id]').forEach(el => el.removeAttribute('id'));
+  $app.querySelectorAll('.pane-side [data-act], .pane-side [data-change], .pane-side [data-form]').forEach(el => {
+    el.removeAttribute('data-act'); el.removeAttribute('data-change'); el.removeAttribute('data-form');
+  });
+  $app.querySelectorAll('.pane-side a[href]').forEach(a => a.removeAttribute('href'));
+}
+
+const Swipe = { g: null, lastSwipe: 0 };
 document.addEventListener('touchstart', e => {
-  const zone = e.target.closest('#calSwipe, #rehSwipe');
-  // Pas de changement de page si le doigt part de la poignée ☰ ou d'un champ
-  if (!zone || e.touches.length !== 1 || e.target.closest('.drag-handle, input, textarea, select')) { swipe = null; return; }
-  swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), zone };
-}, { passive: true });
-document.addEventListener('touchend', e => {
-  if (!swipe) return;
-  const dx = e.changedTouches[0].clientX - swipe.x;
-  const dy = e.changedTouches[0].clientY - swipe.y;
-  const { zone, t } = swipe;
-  swipe = null;
-  // Geste nettement horizontal, assez long et assez rapide
-  if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - t > 800) return;
-  const dir = dx < 0 ? 'next' : 'prev';
-  if (zone.id === 'rehSwipe') rehGo(zone.dataset[dir], dir);
-  else calGo(zone.dataset[dir], dir);
+  const vp = e.target.closest('.swipe-vp');
+  // Pas de glisser si le doigt part de la poignée ☰, d'un champ ou pendant une animation
+  if (!vp || e.touches.length !== 1 || vp.dataset.busy || e.target.closest('.drag-handle, input, textarea, select, audio')) { Swipe.g = null; return; }
+  const t = e.touches[0];
+  Swipe.g = { vp, track: vp.querySelector('.swipe-track'), x0: t.clientX, y0: t.clientY, dx: 0, mode: null,
+    w: vp.querySelector('.pane-cur').offsetWidth + SWIPE_GAP, pts: [{ x: t.clientX, t: performance.now() }] };
 }, { passive: true });
 
+document.addEventListener('touchmove', e => {
+  const g = Swipe.g;
+  if (!g) return;
+  const t = e.touches[0];
+  const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
+  if (!g.mode) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+    g.mode = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'h' : 'v'; // horizontal ou vertical, une fois pour toutes
+    if (g.mode !== 'h') return;
+    g.track.style.transition = 'none';
+    // Si la page est défilée, on aligne le haut des pages voisines sur le haut de l'écran
+    const headerH = document.querySelector('header.top')?.offsetHeight || 0;
+    g.shift = Math.max(0, headerH - g.vp.getBoundingClientRect().top + 8);
+    g.vp.querySelectorAll('.pane-side').forEach(p => { p.style.transform = `translateY(${g.shift}px)`; });
+  }
+  if (g.mode !== 'h') return;
+  let d = dx;
+  const target = d < 0 ? g.vp.dataset.next : g.vp.dataset.prev;
+  if (!target) d = d * 0.3; // effet élastique quand il n'y a rien de ce côté
+  g.dx = d;
+  g.track.style.transform = `translate3d(${d}px,0,0)`;
+  g.pts.push({ x: t.clientX, t: performance.now() });
+  if (g.pts.length > 12) g.pts.shift();
+}, { passive: true });
+
+function endSwipe() {
+  const g = Swipe.g;
+  Swipe.g = null;
+  if (!g || g.mode !== 'h') return;
+  Swipe.lastSwipe = performance.now();
+  const dir = g.dx < 0 ? 'next' : 'prev';
+  const target = g.vp.dataset[dir];
+  // Vitesse du doigt sur la fin du geste (px/ms) : un coup de doigt vif suffit à changer de page
+  const b = g.pts[g.pts.length - 1];
+  const a = g.pts.find(p => b.t - p.t <= 120) || g.pts[0];
+  const v = (b.x - (a === b ? g.pts[0].x : a.x)) / Math.max(1, b.t - (a === b ? g.pts[0].t : a.t));
+  const fling = Math.abs(v) > 0.35 && Math.sign(v) === Math.sign(g.dx);
+  const commit = target && (Math.abs(g.dx) > g.w * 0.25 || fling);
+  g.track.style.transition = 'transform .28s cubic-bezier(.2,.8,.2,1)';
+  if (!commit) {
+    g.track.style.transform = 'translate3d(0,0,0)';
+    setTimeout(() => g.vp.querySelectorAll('.pane-side').forEach(p => { p.style.transform = ''; }), 300);
+    return;
+  }
+  g.vp.dataset.busy = '1';
+  g.track.style.transform = `translate3d(${dir === 'next' ? -g.w : g.w}px,0,0)`;
+  setTimeout(() => {
+    // La page voisine est maintenant affichée : on remonte en haut (sans saut visible) et on charge la vraie page
+    if (g.shift) { g.vp.querySelectorAll('.pane-side').forEach(p => { p.style.transform = ''; }); window.scrollTo(0, 0); }
+    state.calDir = null;
+    go(g.vp.dataset.kind === 'cal' ? '#/calendrier/' + target : '#/repete/' + target);
+  }, 290);
+}
+document.addEventListener('touchend', endSwipe, { passive: true });
+document.addEventListener('touchcancel', endSwipe, { passive: true });
+// Un glisser ne doit jamais être pris pour un appui sur un lien ou un jour du calendrier
+document.addEventListener('click', e => {
+  if (performance.now() - Swipe.lastSwipe < 400 && e.target.closest('.swipe-vp')) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+
 // ===== Détail d'une répète =====
-async function viewRehearsal(id) {
-  const [r, songs, allReh] = await Promise.all([
-    q(db.from('rehearsals').select('*, availability(member,status), rehearsal_votes(member,vote), setlist_items(id,position,note,song_id,songs(title,cover_path,song_progress(member,level)))').eq('id', id).maybeSingle()),
-    q(db.from('songs').select('id,title').order('title')),
-    q(db.from('rehearsals').select('id,date,time').order('date').order('time').order('created_at')),
-  ]);
-  if (!r) { $app.innerHTML = `<div class="empty">Cette répète n'existe plus.<br><br><a class="btn" href="#/repetes">Retour</a></div>`; return; }
+const REH_SELECT = '*, availability(member,status), rehearsal_votes(member,vote), setlist_items(id,position,note,song_id,songs(title,cover_path,song_progress(member,level)))';
+
+// Construit le contenu d'une fiche de répète (utilisé pour la page actuelle et ses voisines)
+async function rehearsalHtml(r, songs, allReh) {
   const av = r.availability || [];
   const items = (r.setlist_items || []).sort((a, b) => a.position - b.position);
   const inSet = new Set(items.map(i => i.song_id));
   const available = songs.filter(s => !inSet.has(s.id))
     .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
-  state.availableSongs = available.map(s => s.id);
   const urlOf = await signedUrls(items.map(it => it.songs?.cover_path));
   const nextPos = items.length ? items[items.length - 1].position + 1 : 0;
   const mine = av.find(a => a.member === state.me);
   const idx = allReh.findIndex(x => x.id === r.id);
-  const prevR = idx > 0 ? allReh[idx - 1] : null;
-  const nextR = idx >= 0 && idx < allReh.length - 1 ? allReh[idx + 1] : null;
-  const navLabel = x => esc(fmtDate(x.date, { weekday: 'short', day: 'numeric', month: 'short' }));
+  const hasPrev = idx > 0, hasNext = idx >= 0 && idx < allReh.length - 1;
 
-  $app.innerHTML = `
-    <div id="rehSwipe" data-prev="${prevR ? prevR.id : ''}" data-next="${nextR ? nextR.id : ''}">
+  const html = `
     <a class="back" href="#/repetes">‹ Répètes</a>
     <h2 class="cap" style="margin-bottom:2px;${rehState(r).s === 'annulee' ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
     <p class="muted small" style="margin:0 0 12px">
-      <span style="opacity:${prevR ? 1 : .25}">‹</span> glisse pour changer de répète <span style="opacity:${nextR ? 1 : .25}">›</span>
+      <span style="opacity:${hasPrev ? 1 : .25}">‹</span> glisse pour changer de répète <span style="opacity:${hasNext ? 1 : .25}">›</span>
     </p>
     <div class="row between wrap">
       <div class="row wrap" style="gap:8px">${dayChip(r.date)}<span class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</span></div>
@@ -907,16 +985,32 @@ async function viewRehearsal(id) {
       <button class="btn-accent full" style="margin-top:12px" data-act="savenotes" data-id="${r.id}">Enregistrer le bilan</button>
     </div>
 
-    <button class="btn-danger full" style="margin-top:24px" data-act="delreh" data-id="${r.id}">Supprimer cette répète</button>
-    </div>
-  `;
+    <button class="btn-danger full" style="margin-top:24px" data-act="delreh" data-id="${r.id}">Supprimer cette répète</button>`;
+  return { html, available };
+}
+
+async function viewRehearsal(id) {
+  const [songs, allReh] = await Promise.all([
+    q(db.from('songs').select('id,title').order('title')),
+    q(db.from('rehearsals').select('id,date,time').order('date').order('time').order('created_at')),
+  ]);
+  const idx = allReh.findIndex(x => x.id === id);
+  const prevId = idx > 0 ? allReh[idx - 1].id : '';
+  const nextId = idx >= 0 && idx < allReh.length - 1 ? allReh[idx + 1].id : '';
+  // On charge la répète et ses deux voisines d'un coup, pour les afficher pendant le glisser
+  const recs = await q(db.from('rehearsals').select(REH_SELECT).in('id', [id, prevId, nextId].filter(Boolean)));
+  const byId = Object.fromEntries(recs.map(x => [x.id, x]));
+  const r = byId[id];
+  if (!r) { $app.innerHTML = `<div class="empty">Cette répète n'existe plus.<br><br><a class="btn" href="#/repetes">Retour</a></div>`; return; }
+  const [cur, prev, next] = await Promise.all([
+    rehearsalHtml(r, songs, allReh),
+    byId[prevId] ? rehearsalHtml(byId[prevId], songs, allReh) : null,
+    byId[nextId] ? rehearsalHtml(byId[nextId], songs, allReh) : null,
+  ]);
+  state.availableSongs = cur.available.map(s => s.id);
+  $app.innerHTML = swipeFrame('reh', prev ? prevId : '', next ? nextId : '', prev?.html, cur.html, next?.html);
+  neutralizeSides(); // avant tout le reste : les voisines ne doivent garder aucun identifiant
   initSetlistSort();
-  if (state.rehDir) {
-    $app.classList.remove('cal-in-next', 'cal-in-prev');
-    void $app.offsetWidth; // relance l'animation
-    $app.classList.add('cal-in-' + state.rehDir);
-    setTimeout(() => $app.classList.remove('cal-in-next', 'cal-in-prev'), 300);
-  }
 }
 
 // Aller à la répète précédente / suivante
