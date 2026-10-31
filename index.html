@@ -319,42 +319,66 @@ function nextWeekday(fromIso, wd) {
   return isoOf(dt);
 }
 // État d'une répète selon les absents et le vote « on répète quand même ? »
-// normal : personne n'a dit non · vote : en cours · maintenue · annulee
+// Règle : le vote s'ouvre quand tout le monde a répondu ; la répète est maintenue
+// si TOUS les présents votent « On maintient ». Moins de 4 présents = annulée par défaut.
+// États : normal · attente (réponses manquantes) · vote · maintenue · annulee
 function rehState(r) {
   const av = r.availability || [], votes = r.rehearsal_votes || [];
+  const answered = state.members.filter(m => av.some(a => a.member === m));
+  const pending = state.members.filter(m => !answered.includes(m));
   const absents = state.members.filter(m => av.some(a => a.member === m && a.status === 'non'));
-  if (!absents.length) return { s: 'normal', absents, voters: [], maintain: [], annul: [] };
+  const base = { absents, pending, voters: [], maintain: [], annul: [], tooFew: false, open: false };
+  if (!absents.length) return { ...base, s: 'normal' };
   const voters = state.members.filter(m => !absents.includes(m)); // les absents ne votent pas
   const vOf = m => votes.find(v => v.member === m)?.vote;
   const maintain = voters.filter(m => vOf(m) === 'maintenir');
   const annul = voters.filter(m => vOf(m) === 'annuler');
-  const possible = voters.length - annul.length; // maximum de « maintient » encore atteignable
-  const s = maintain.length >= MIN_PRESENT ? 'maintenue' : possible < MIN_PRESENT ? 'annulee' : 'vote';
-  return { s, absents, voters, maintain, annul, tooFew: voters.length < MIN_PRESENT };
+  const tooFew = voters.length < MIN_PRESENT;
+  const open = pending.length === 0; // vote seulement quand tout le monde a répondu
+  let s;
+  if (open && voters.length && maintain.length === voters.length) s = 'maintenue';
+  else if (tooFew || (open && annul.length)) s = 'annulee';
+  else if (!open) s = 'attente';
+  else s = 'vote';
+  return { ...base, s, voters, maintain, annul, tooFew, open };
 }
 function stateHtml(r) {
   const st = rehState(r);
   const names = esc(st.absents.join(', '));
+  const abs = `absent${st.absents.length > 1 ? 's' : ''} : ${names}`;
   if (st.s === 'normal') return '';
-  if (st.s === 'maintenue') return `<div class="alert ok">✓ Maintenue sans ${names}</div>`;
-  if (st.s === 'annulee') return `<div class="alert no">✗ Annulée${st.tooFew ? ', pas assez de monde' : ''} · absent${st.absents.length > 1 ? 's' : ''} : ${names}</div>`;
-  return `<div class="alert">⚠️ Il manque ${names} · vote en cours (${st.maintain.length}/${MIN_PRESENT})</div>`;
+  if (st.s === 'maintenue') return `<div class="alert ok">✓ Maintenue${st.tooFew ? ' quand même' : ''} sans ${names}</div>`;
+  if (st.s === 'annulee') return st.annul.length
+    ? `<div class="alert no">✗ Annulée · ${abs}</div>`
+    : `<div class="alert no">✗ Annulée : moins de ${MIN_PRESENT} · ${abs}</div>`;
+  if (st.s === 'attente') return `<div class="alert">⚠️ Il manque ${names} · en attente des réponses (${state.members.length - st.pending.length}/${state.members.length})</div>`;
+  return `<div class="alert">⚠️ Il manque ${names} · vote en cours (${st.maintain.length}/${st.voters.length})</div>`;
 }
 function decisionHtml(r) {
   const st = rehState(r);
   if (st.s === 'normal') return '';
   const myVote = (r.rehearsal_votes || []).find(v => v.member === state.me)?.vote;
   const waiting = st.voters.filter(m => !st.maintain.includes(m) && !st.annul.includes(m));
+  const absents = `<strong>${esc(st.absents.join(', '))}</strong>`;
+  if (!st.open) return `
+    <h3>On répète quand même ?</h3>
+    <div class="card">
+      <div>Il manque ${absents}. Le vote s'ouvrira quand tout le monde aura donné sa dispo.</div>
+      <div class="muted small" style="margin-top:8px">Pas encore répondu : ${esc(st.pending.join(', '))}</div>
+      ${stateHtml(r)}
+    </div>`;
   return `
     <h3>On répète quand même ?</h3>
     <div class="card">
-      <div style="margin-bottom:12px">Il manque <strong>${esc(st.absents.join(', '))}</strong>. Il faut ${MIN_PRESENT} votes « On maintient » pour garder la répète.</div>
-      ${st.tooFew ? '' : st.voters.includes(state.me) ? `
+      <div style="margin-bottom:12px">Il manque ${absents}. ${st.tooFew
+        ? `Vous êtes moins de ${MIN_PRESENT} : la répète est annulée, sauf si <strong>tous les présents</strong> votent « On maintient quand même ».`
+        : `La répète est maintenue si <strong>tous les présents</strong> votent « On maintient ».`}</div>
+      ${st.voters.includes(state.me) ? `
         <div class="vote">
-          <button class="yes ${myVote === 'maintenir' ? 'on' : ''}" data-act="decide" data-id="${r.id}" data-v="maintenir">On maintient</button>
+          <button class="yes ${myVote === 'maintenir' ? 'on' : ''}" data-act="decide" data-id="${r.id}" data-v="maintenir">${st.tooFew ? 'On maintient quand même' : 'On maintient'}</button>
           <button class="no ${myVote === 'annuler' ? 'on' : ''}" data-act="decide" data-id="${r.id}" data-v="annuler">On annule</button>
         </div>` : `<div class="muted small">Tu es absent, tu ne votes pas.</div>`}
-      ${st.tooFew ? '' : `
+      ${`
         <div class="small" style="margin-top:12px;line-height:1.7">
           <div><span style="color:var(--yes);font-weight:600">Maintient :</span> ${esc(st.maintain.join(', ') || 'personne')}</div>
           <div><span style="color:var(--no);font-weight:600">Annule :</span> ${esc(st.annul.join(', ') || 'personne')}</div>
@@ -620,7 +644,7 @@ async function viewCalendar(ym) {
     const todayCls = iso === today ? ' today' : '';
     if (list) {
       const c = dayInfo(iso).color;
-      const warn = list.some(r => rehState(r).s === 'vote');
+      const warn = list.some(r => ['vote', 'attente'].includes(rehState(r).s));
       const cancel = list.every(r => rehState(r).s === 'annulee') ? ' cancel' : '';
       cells += `<a class="cal-cell has${todayCls}${cancel}" href="#/repete/${list[0].id}" style="background:${c}33;border-color:${c};color:${c}">${d}
         ${warn ? '<span class="cal-warn">⚠️</span>' : ''}${list.length > 1 ? `<span class="cal-more">×${list.length}</span>` : ''}</a>`;
