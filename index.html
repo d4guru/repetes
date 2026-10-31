@@ -13,6 +13,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script>
 <style>
 :root{
   --bg:#121214; --surface:#1c1c21; --surface2:#26262d; --border:#34343d;
@@ -82,6 +83,10 @@ pre.lyrics{white-space:pre-wrap;font-family:inherit;margin:0;background:var(--bg
 .set-item{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:10px}
 .set-num{width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
 .set-item textarea{min-height:60px;margin-top:8px;font-size:15px}
+.drag-handle{flex:none;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;font-size:22px;line-height:1;
+  color:var(--muted);padding:8px 6px;margin:-8px 0 -8px -4px}
+.sortable-ghost{opacity:.35}
+.sortable-chosen{border-color:var(--accent)!important;box-shadow:0 6px 20px rgba(0,0,0,.5)}
 details summary{cursor:pointer;color:var(--muted);padding:10px 0;font-weight:600}
 .empty{color:var(--muted);text-align:center;padding:24px 8px}
 .back{display:inline-block;color:var(--muted);margin-bottom:8px;padding:6px 0}
@@ -521,7 +526,10 @@ async function viewRehearsal(id) {
   const av = r.availability || [];
   const items = (r.setlist_items || []).sort((a, b) => a.position - b.position);
   const inSet = new Set(items.map(i => i.song_id));
-  const available = songs.filter(s => !inSet.has(s.id));
+  const available = songs.filter(s => !inSet.has(s.id))
+    .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
+  state.availableSongs = available.map(s => s.id);
+  const nextPos = items.length ? items[items.length - 1].position + 1 : 0;
   const mine = av.find(a => a.member === state.me);
 
   $app.innerHTML = `
@@ -556,23 +564,26 @@ async function viewRehearsal(id) {
     </div>
 
     <h3>Setlist (${items.length})</h3>
-    ${items.length ? items.map((it, i) => `
-      <div class="set-item">
+    ${items.length ? `<div id="setlist">${items.map((it, i) => `
+      <div class="set-item" data-id="${it.id}">
         <div class="row">
+          <span class="drag-handle" aria-label="Déplacer">☰</span>
           <span class="set-num">${i + 1}</span>
           <a class="grow title" style="font-size:16px" href="#/morceau/${it.song_id}">${esc(it.songs?.title || '(morceau supprimé)')}</a>
-          <button class="btn-sm btn-icon" data-act="move" data-id="${it.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Monter">↑</button>
-          <button class="btn-sm btn-icon" data-act="move" data-id="${it.id}" data-dir="1" ${i === items.length - 1 ? 'disabled' : ''} aria-label="Descendre">↓</button>
           <button class="btn-sm btn-icon btn-ghost" data-act="unset" data-id="${it.id}" aria-label="Retirer">✕</button>
         </div>
         ${it.songs ? dotsHtml(it.songs.song_progress) : ''}
         <textarea data-change="itemnote" data-id="${it.id}" placeholder="Note sur ce morceau pour cette répète (enregistré automatiquement)">${esc(it.note)}</textarea>
-      </div>`).join('') : `<div class="empty">Pas encore de morceaux prévus.</div>`}
+      </div>`).join('')}</div>
+      <p class="muted small" style="margin:0 0 10px">Maintiens ☰ et glisse pour changer l'ordre.</p>` : `<div class="empty">Pas encore de morceaux prévus.</div>`}
     ${available.length ? `
       <div class="row" style="margin-top:6px">
         <select id="addSong" class="grow">${available.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('')}</select>
-        <button class="btn-accent" data-act="addset" data-id="${r.id}" data-next="${items.length ? items[items.length - 1].position + 1 : 0}">Ajouter</button>
-      </div>` : (songs.length ? '' : `<div class="muted small">Ajoute d'abord des morceaux dans l'onglet Morceaux.</div>`)}
+        <button class="btn-accent" data-act="addset" data-id="${r.id}" data-next="${nextPos}">Ajouter</button>
+      </div>
+      <button class="full" style="margin-top:10px" data-act="addall" data-id="${r.id}" data-next="${nextPos}">+ Tout ajouter (${available.length})</button>`
+      : (songs.length ? '' : `<div class="muted small">Ajoute d'abord des morceaux dans l'onglet Morceaux.</div>`)}
+    ${items.length ? `<button class="btn-danger full btn-sm" style="margin-top:10px" data-act="clearset" data-id="${r.id}">Vider la setlist</button>` : ''}
 
     <h3>Bilan de la répète</h3>
     <div class="card">
@@ -585,6 +596,28 @@ async function viewRehearsal(id) {
 
     <button class="btn-danger full" style="margin-top:24px" data-act="delreh" data-id="${r.id}">Supprimer cette répète</button>
   `;
+  initSetlistSort();
+}
+
+// Glisser-déposer de la setlist (poignée ☰)
+function initSetlistSort() {
+  const list = document.getElementById('setlist');
+  if (!list || !window.Sortable) return;
+  Sortable.create(list, {
+    handle: '.drag-handle',
+    animation: 150,
+    delay: 0,
+    fallbackTolerance: 3,
+    onEnd: async evt => {
+      if (evt.oldIndex === evt.newIndex) return;
+      const ids = [...list.querySelectorAll('.set-item')].map(el => el.dataset.id);
+      list.querySelectorAll('.set-num').forEach((el, i) => { el.textContent = i + 1; });
+      try {
+        await Promise.all(ids.map((id, i) => q(db.from('setlist_items').update({ position: i }).eq('id', id))));
+        toast('Ordre enregistré');
+      } catch (e) { route(); }
+    },
+  });
 }
 
 // ===== Liste des morceaux =====
@@ -745,14 +778,18 @@ const actions = {
     await q(db.from('setlist_items').delete().eq('id', el.dataset.id));
     route();
   },
-  async move(el) {
-    const rid = location.hash.split('/')[2];
-    const items = await q(db.from('setlist_items').select('id,position').eq('rehearsal_id', rid).order('position'));
-    const i = items.findIndex(x => x.id === el.dataset.id);
-    const j = i + Number(el.dataset.dir);
-    if (i < 0 || j < 0 || j >= items.length) return;
-    [items[i], items[j]] = [items[j], items[i]];
-    await Promise.all(items.map((it, idx) => it.position === idx ? null : q(db.from('setlist_items').update({ position: idx }).eq('id', it.id))));
+  async addall(el) {
+    const ids = state.availableSongs || [];
+    if (!ids.length) return;
+    const start = Number(el.dataset.next);
+    await q(db.from('setlist_items').insert(ids.map((song_id, i) => ({ rehearsal_id: el.dataset.id, song_id, position: start + i }))));
+    toast(`${ids.length} morceau${ids.length > 1 ? 'x ajoutés' : ' ajouté'}`);
+    route();
+  },
+  async clearset(el) {
+    if (!confirm('Vider toute la setlist de cette répète ? Les notes par morceau de cette répète seront aussi effacées.')) return;
+    await q(db.from('setlist_items').delete().eq('rehearsal_id', el.dataset.id));
+    toast('Setlist vidée');
     route();
   },
   rehmode(el) {
