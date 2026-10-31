@@ -129,6 +129,8 @@ details summary{cursor:pointer;color:var(--muted);padding:10px 0;font-weight:600
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
 const db = supabase.createClient(SB_URL, SB_KEY);
+// Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
+const GROUP_EMAIL = 'groupe@example.com';
 
 // ===== Constantes =====
 const VOTES = [
@@ -166,7 +168,7 @@ function dotsHtml(progress) {
   }).join('')}</div>`;
 }
 
-const state = { band: 'Mon groupe', members: [], me: null };
+const state = { band: 'Mon groupe', members: [], me: null, authed: false };
 const $app = document.getElementById('app');
 
 // ===== Utilitaires =====
@@ -209,6 +211,8 @@ async function loadBase() {
 
 // ===== Routage =====
 async function route() {
+  if (!state.authed) return viewLogin();
+  document.getElementById('nav').classList.remove('hidden');
   const parts = (location.hash.replace(/^#\/?/, '') || 'repetes').split('/');
   const [view, id] = parts;
   document.querySelectorAll('#nav a').forEach(a => {
@@ -225,6 +229,33 @@ async function route() {
   } catch (e) {
     $app.innerHTML = `<div class="empty">Impossible de charger les données.<br><br><button onclick="route()">Réessayer</button></div>`;
   }
+}
+
+// ===== Connexion (mot de passe du groupe) =====
+function viewLogin() {
+  document.getElementById('nav').classList.add('hidden');
+  document.getElementById('bandName').textContent = 'Répètes';
+  document.getElementById('meLabel').textContent = '';
+  $app.innerHTML = `
+    <div class="picker">
+      <img src="icon-192.png" alt="" style="width:88px;height:88px;border-radius:20px">
+      <h2 style="margin-top:16px">Accès réservé au groupe</h2>
+      <p class="muted">Entre le mot de passe du groupe. Il sera mémorisé sur ce téléphone.</p>
+      <form data-form="login" style="text-align:left">
+        <input type="password" name="password" required autocomplete="current-password" placeholder="Mot de passe du groupe">
+        <button type="submit" class="btn-accent full" style="margin-top:12px">Entrer</button>
+      </form>
+    </div>`;
+  setTimeout(() => $app.querySelector('input[name=password]')?.focus(), 50);
+}
+
+async function start() {
+  try { await loadBase(); }
+  catch (e) {
+    $app.innerHTML = `<div class="empty">Connexion à la base impossible.<br>Vérifie ta connexion internet.<br><br><button onclick="location.reload()">Réessayer</button></div>`;
+    return;
+  }
+  route();
 }
 
 // ===== Choix du membre =====
@@ -486,6 +517,11 @@ async function viewSettings() {
       <span>Tu es <strong>${esc(state.me)}</strong></span>
       <button class="btn-sm" data-act="changeme">Changer</button>
     </div>
+    <h3>Connexion</h3>
+    <div class="card row between">
+      <span class="muted small">Connecté avec le mot de passe du groupe</span>
+      <button class="btn-sm" data-act="logout">Se déconnecter</button>
+    </div>
     <h3>Membres (${state.members.length})</h3>
     <div class="card">
       ${state.members.map(m => `<div class="member-row"><span>${esc(m)}</span>
@@ -575,6 +611,12 @@ const actions = {
     await loadBase();
     toast('Nom du groupe enregistré');
   },
+  async logout() {
+    if (!confirm('Se déconnecter ? Il faudra retaper le mot de passe du groupe.')) return;
+    await db.auth.signOut();
+    state.authed = false;
+    viewLogin();
+  },
   changeme() { setMe(null); document.getElementById('meLabel').textContent = ''; viewPicker(); },
   async delmember(el) {
     const n = el.dataset.name;
@@ -604,7 +646,12 @@ document.addEventListener('submit', async e => {
   const d = Object.fromEntries(new FormData(form));
   const btn = form.querySelector('[type=submit]'); if (btn) btn.disabled = true;
   try {
-    if (form.dataset.form === 'newReh') {
+    if (form.dataset.form === 'login') {
+      const { error } = await db.auth.signInWithPassword({ email: GROUP_EMAIL, password: d.password });
+      if (error) { toast('Mot de passe incorrect'); return; }
+      state.authed = true;
+      await start();
+    } else if (form.dataset.form === 'newReh') {
       const r = await q(db.from('rehearsals').insert({ date: d.date, time: d.time, place: d.place.trim(), created_by: state.me }).select('id').single());
       go('#/repete/' + r.id);
     } else if (form.dataset.form === 'editReh') {
@@ -651,15 +698,17 @@ if ('serviceWorker' in navigator) {
 window.addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => {
   // Rafraîchit les données quand on revient sur l'app, sauf si un champ est en cours d'édition
-  if (document.visibilityState === 'visible' && !document.querySelector('textarea:focus, input:focus')) loadBase().then(route).catch(() => {});
+  if (state.authed && document.visibilityState === 'visible' && !document.querySelector('textarea:focus, input:focus')) loadBase().then(route).catch(() => {});
+});
+// Si la session expire ou est fermée, retour à l'écran de connexion
+db.auth.onAuthStateChange(event => {
+  if (event === 'SIGNED_OUT') { state.authed = false; viewLogin(); }
 });
 (async () => {
-  try { await loadBase(); }
-  catch (e) {
-    $app.innerHTML = `<div class="empty">Connexion à la base impossible.<br>Vérifie que le script setup.sql a bien été exécuté dans Supabase.<br><br><button onclick="location.reload()">Réessayer</button></div>`;
-    return;
-  }
-  route();
+  const { data } = await db.auth.getSession();
+  state.authed = !!data?.session;
+  if (!state.authed) return viewLogin();
+  start();
 })();
 </script>
 </body>
