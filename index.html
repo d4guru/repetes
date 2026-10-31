@@ -133,6 +133,8 @@ label.check input{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 .cal-more{position:absolute;bottom:1px;right:4px;font-size:10px}
 .legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
 #calSwipe{touch-action:pan-y;overflow:hidden}
+#rehSwipe{touch-action:pan-y}
+body{overflow-x:clip}
 @keyframes calFromRight{from{transform:translateX(40%);opacity:0}to{transform:none;opacity:1}}
 @keyframes calFromLeft{from{transform:translateX(-40%);opacity:0}to{transform:none;opacity:1}}
 .cal-in-next{animation:calFromRight .25s ease-out}
@@ -500,8 +502,8 @@ function calGo(ym, dir) {
 // Glisser le doigt sur le calendrier pour changer de mois
 let swipe = null;
 document.addEventListener('touchstart', e => {
-  const zone = e.target.closest('#calSwipe');
-  if (!zone || e.touches.length !== 1) { swipe = null; return; }
+  const zone = e.target.closest('#calSwipe, #rehSwipe');
+  if (!zone || e.touches.length !== 1 || e.target.closest('input, textarea, select')) { swipe = null; return; }
   swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), zone };
 }, { passive: true });
 document.addEventListener('touchend', e => {
@@ -512,15 +514,17 @@ document.addEventListener('touchend', e => {
   swipe = null;
   // Geste nettement horizontal, assez long et assez rapide
   if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - t > 800) return;
-  if (dx < 0) calGo(zone.dataset.next, 'next');
-  else calGo(zone.dataset.prev, 'prev');
+  const dir = dx < 0 ? 'next' : 'prev';
+  if (zone.id === 'rehSwipe') rehGo(zone.dataset[dir], dir);
+  else calGo(zone.dataset[dir], dir);
 }, { passive: true });
 
 // ===== Détail d'une répète =====
 async function viewRehearsal(id) {
-  const [r, songs] = await Promise.all([
+  const [r, songs, allReh] = await Promise.all([
     q(db.from('rehearsals').select('*, availability(member,status), setlist_items(id,position,note,song_id,songs(title,song_progress(member,level)))').eq('id', id).maybeSingle()),
     q(db.from('songs').select('id,title').order('title')),
+    q(db.from('rehearsals').select('id,date,time').order('date').order('time').order('created_at')),
   ]);
   if (!r) { $app.innerHTML = `<div class="empty">Cette répète n'existe plus.<br><br><a class="btn" href="#/repetes">Retour</a></div>`; return; }
   const av = r.availability || [];
@@ -531,15 +535,25 @@ async function viewRehearsal(id) {
   state.availableSongs = available.map(s => s.id);
   const nextPos = items.length ? items[items.length - 1].position + 1 : 0;
   const mine = av.find(a => a.member === state.me);
+  const idx = allReh.findIndex(x => x.id === r.id);
+  const prevR = idx > 0 ? allReh[idx - 1] : null;
+  const nextR = idx >= 0 && idx < allReh.length - 1 ? allReh[idx + 1] : null;
+  const navLabel = x => esc(fmtDate(x.date, { weekday: 'short', day: 'numeric', month: 'short' }));
 
   $app.innerHTML = `
+    <div id="rehSwipe" data-prev="${prevR ? prevR.id : ''}" data-next="${nextR ? nextR.id : ''}">
     <a class="back" href="#/repetes">‹ Répètes</a>
+    <div class="row between" style="margin:2px 0 12px">
+      ${prevR ? `<button class="btn-sm" style="color:${dayInfo(prevR.date).color}" data-act="rehnav" data-id="${prevR.id}" data-dir="prev">‹ ${navLabel(prevR)}</button>` : '<span></span>'}
+      ${nextR ? `<button class="btn-sm" style="color:${dayInfo(nextR.date).color}" data-act="rehnav" data-id="${nextR.id}" data-dir="next">${navLabel(nextR)} ›</button>` : '<span></span>'}
+    </div>
     <h2 class="cap">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
     <div class="row between wrap">
       <div class="row wrap" style="gap:8px">${dayChip(r.date)}<span class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</span></div>
       <button class="btn-sm" data-act="toggle" data-target="editReh">Modifier</button>
     </div>
     ${alertHtml(av)}
+    </div>
     <form id="editReh" class="card hidden" data-form="editReh" data-id="${r.id}" style="margin-top:12px">
       <label>Date</label><input type="date" name="date" required value="${esc(r.date)}">
       <label>Heure</label><input type="time" name="time" value="${esc(r.time)}">
@@ -597,6 +611,21 @@ async function viewRehearsal(id) {
     <button class="btn-danger full" style="margin-top:24px" data-act="delreh" data-id="${r.id}">Supprimer cette répète</button>
   `;
   initSetlistSort();
+  if (state.rehDir) {
+    $app.classList.remove('cal-in-next', 'cal-in-prev');
+    void $app.offsetWidth; // relance l'animation
+    $app.classList.add('cal-in-' + state.rehDir);
+    setTimeout(() => $app.classList.remove('cal-in-next', 'cal-in-prev'), 300);
+  }
+}
+
+// Aller à la répète précédente / suivante
+function rehGo(id, dir) {
+  if (!id) return;
+  state.rehDir = dir;
+  window.scrollTo(0, 0);
+  go('#/repete/' + id);
+  setTimeout(() => { state.rehDir = null; }, 600);
 }
 
 // Glisser-déposer de la setlist (poignée ☰)
@@ -802,6 +831,7 @@ const actions = {
     if (series) updateSeriesPreview(); else updateSubmitLabel();
   },
   calnav(el) { calGo(el.dataset.ym, el.dataset.dir); },
+  rehnav(el) { rehGo(el.dataset.id, el.dataset.dir); },
   async level(el) {
     await q(db.from('song_progress').upsert(
       { song_id: el.dataset.id, member: state.me, level: el.dataset.l, updated_at: new Date().toISOString() },
