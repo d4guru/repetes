@@ -715,7 +715,7 @@ input:disabled{opacity:.55}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 36; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 37; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -1761,10 +1761,6 @@ async function viewSongs($app = APP) {
       if (!list.length) return '';
       return `<h3>${SONG_STATUS[g]} (${list.length})</h3>` + list.map(s => songCard(s, urlOf)).join('');
     }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec le bouton + en bas à droite.</div>`}
-    ${(() => {
-      const done = songs.filter(s => s.frozen_at).sort((a, b) => (b.frozen_at || '').localeCompare(a.frozen_at || ''));
-      return done.length ? `<h3 class="done-head">${LOCK_ICO}Terminés (${done.length})</h3>` + done.map(s => songCard(s, urlOf, true)).join('') : '';
-    })()}
   `;
 }
 
