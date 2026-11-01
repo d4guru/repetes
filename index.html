@@ -1857,8 +1857,6 @@ async function songHtml(id, hasPrev, hasNext) {
       }).join('')}
     </div>
 
-    ${fieldBlock(song, 'tabs', 'Tabs', 'mono')}
-
     <h3 style="margin-top:22px">Tablatures en PDF ou photo (${files.length})</h3>
     <div class="card">
       ${files.map(f => `
@@ -2571,7 +2569,7 @@ const Np = {
     this.el('npPrev').disabled = Player.i === 0;
     this.el('npNext').disabled = Player.i === Player.queue.length - 1;
     this.renderTempo(); this.renderLoop(); this.progress();
-    // Paroles, tabs (texte, PDF, photos), notes et repères du morceau (rechargés à chaque ouverture)
+    // Paroles, tablatures (PDF, photos), notes et repères du morceau (rechargés à chaque ouverture)
     this.el('npText').innerHTML = '<div class="muted small" style="padding:12px 0">Chargement…</div>';
     try {
       const [s, files, marks] = await Promise.all([
@@ -2583,7 +2581,6 @@ const Np = {
       if (s) { this.songs[t.songId] = s; t.bpm = s.bpm; }
       const urlOf = await signedUrls((files || []).map(f => f.path));
       this.docs = [
-        ...(s && s.tabs ? [{ id: 'text', kind: 'text', title: 'Tabs (texte)', text: s.tabs }] : []),
         ...(files || []).map(f => ({ id: f.id, kind: f.kind, title: f.title || 'Sans titre', url: urlOf(f.path) })),
       ];
       this.allMarkers = marks || [];
@@ -2600,12 +2597,12 @@ const Np = {
     document.querySelectorAll('#npTabs [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === this.tab));
     if (this.tab === 'tabs' && this.docs && this.docs.length) return this.renderTabs();
     if (this.tab === 'comments') return this.renderComments();
-    const val = s[this.tab] || '';
-    const label = { lyrics: 'de paroles', tabs: 'de tabs', notes: 'de notes' }[this.tab];
+    const val = this.tab === 'tabs' ? '' : s[this.tab] || ''; // les tablatures ne sont plus que des PDF ou des photos
+    const label = { lyrics: 'de paroles', tabs: 'de tablature', notes: 'de notes' }[this.tab];
     this.el('npText').innerHTML = val
-      ? `<pre class="${this.tab === 'tabs' ? 'mono' : 'lyrics'} np-pre">${esc(val)}</pre>`
+      ? `<pre class="lyrics np-pre">${esc(val)}</pre>`
       : `<div class="empty" style="padding:18px 8px">Pas encore ${label} pour ce morceau.<br><br>
-           <button class="btn-sm" data-np="gosong">Ajouter depuis la fiche du morceau</button></div>`;
+           <button class="btn-sm" data-np="gosong">${this.tab === 'tabs' ? 'Ajouter un PDF ou une photo depuis la fiche' : 'Ajouter depuis la fiche du morceau'}</button></div>`;
   },
 
   // ----- Tablature synchronisée -----
@@ -3143,7 +3140,7 @@ const NOTIF_TYPES = [
     ['reh_status', 'Répète maintenue ou annulée'], ['setlist', 'Setlist modifiée'], ['bilan', 'Bilan de répète'],
     ['setlist_note', 'Notes sur les morceaux d\'une répète']] },
   { group: 'Morceaux', icon: 'song', items: [
-    ['song_new', 'Nouveau morceau'], ['song_text', 'Paroles, tabs, notes et titre'], ['level', 'Niveau des autres'],
+    ['song_new', 'Nouveau morceau'], ['song_text', 'Paroles, notes et titre'], ['level', 'Niveau des autres'],
     ['perso_note', 'Notes perso des autres'], ['audio', 'Enregistrements'], ['comment', 'Commentaires sur les démos'], ['cover', 'Pochettes'], ['song_delete', 'Morceau supprimé']] },
   { group: 'Rappels', icon: 'clock', items: [['reminder', 'Rappel avant la répète'], ['dispo_reminder', 'Rappel si tu n\'as pas répondu ou répondu « peut-être »']] },
   { group: 'Groupe', icon: 'group', items: [['group', 'Nom du groupe et membres']] },
