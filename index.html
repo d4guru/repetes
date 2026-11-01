@@ -339,6 +339,9 @@ body{overflow-x:clip}
 .cal-in-prev{animation:calFromLeft .25s ease-out}
 @media (prefers-reduced-motion: reduce){.cal-in-next,.cal-in-prev{animation:none}}
 
+.lall{flex:none;width:50px;height:50px;min-height:0;padding:0;border:0;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(232,100,58,.35)}
+.lall svg{width:24px;height:24px;margin-left:3px;fill:currentColor}
+.lall-txt{display:none}
 .lnew-count{color:var(--accent);font-weight:650}
 .llist{border-top:1px solid var(--border)}
 .lgroup{border-bottom:1px solid var(--border)}
@@ -479,6 +482,10 @@ body.is-paused .eq i{animation-play-state:paused}
   .mk-box{width:min(100%, 1000px);align-self:center;border-left:1px solid var(--border);border-right:1px solid var(--border)}
   #mk .mk-bar > *,.mk-hint{width:100%;max-width:1000px;margin-left:auto;margin-right:auto}
   .dv-box{padding:10px max(8px, calc((100% - 1000px) / 2))}
+  /* Écoute : « Tout lire » garde sa forme de bouton avec texte sur ordinateur */
+  .lall{width:auto;height:auto;min-height:36px;padding:4px 14px;gap:6px;border-radius:11px;font-size:15px;font-weight:600;box-shadow:none}
+  .lall svg{width:14px;height:14px;margin-left:0}
+  .lall-txt{display:inline}
   /* Écoute : « En lecture » affiché à droite de la liste des démos */
   .split[data-split=listen]{grid-template-columns:390px minmax(0,1fr)}
   @media (hover: hover){.lrow:hover{background:rgba(255,255,255,.035)}}
@@ -1968,7 +1975,7 @@ async function viewListen($app = APP) {
   $app.innerHTML = `
     <div class="row between" style="margin-bottom:6px">
       <h2 style="margin:0">Écoute</h2>
-      ${list.length ? `<button class="btn-sm btn-accent" data-act="lall">▶ Tout lire</button>` : ''}
+      ${list.length ? `<button class="lall" data-act="lall" aria-label="Tout lire" title="Tout lire"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span class="lall-txt">Tout lire</span></button>` : ''}
     </div>
     <p class="muted small" style="margin:0 0 10px">${nNew ? `<span class="lnew-count">${nNew} nouveauté${nNew > 1 ? 's' : ''} à écouter</span>` : 'Les démos, la plus récente en haut.'}</p>
     ${list.length ? `<div class="llist">${list.map((s, i) => {
