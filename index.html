@@ -409,6 +409,21 @@ body.is-paused .eq i{animation-play-state:paused}
 .cm-send{flex:none;width:42px;height:42px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
 .cm-send svg{width:20px;height:20px;fill:currentColor;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
 @media (hover: hover){ .cm:hover .cm-radd{opacity:1} }
+
+.ico-lock{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.chip.done{display:inline-flex;align-items:center;gap:4px;background:rgba(242,242,244,.09);color:#d9d9e0;border:1px solid rgba(242,242,244,.16);font-size:12px;padding:2px 9px}
+.chip.final{display:inline-block;flex:none;margin-left:6px;padding:1px 8px;font-size:11px;font-weight:700;background:rgba(76,154,255,.16);color:#8fbcff;vertical-align:1px}
+.song-link .chip.done{margin:0 8px 0 6px}
+.song-final{margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.done-head{display:flex;align-items:center;gap:7px}
+.done-head .ico-lock{width:15px;height:15px}
+.frozen-banner{display:flex;align-items:center;gap:12px;padding:12px 14px;margin:0 0 16px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}
+.frozen-ico{flex:none;width:36px;height:36px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--text)}
+.frozen-ico .ico-lock{width:18px;height:18px}
+.frozen-title{font-weight:700}
+.freeze-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px}
+.freeze-btn .ico-lock{width:16px;height:16px}
+input:disabled{opacity:.55}
 .w-only{display:none}
 .w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
@@ -1718,8 +1733,20 @@ function initSetlistSort() {
 }
 
 // ===== Liste des morceaux =====
+function songCard(s, urlOf, inDone) {
+  const fin = (s.song_audio || []).find(a => a.id === s.final_audio_id);
+  return `
+    <a class="card song-link row" style="gap:12px" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
+      ${coverThumb(s.title, urlOf(s.cover_path), 52)}
+      <div class="grow" style="min-width:0">
+        <div class="row between"><span class="title grow" style="font-size:17px">${esc(s.title)}</span>${s.frozen_at ? doneBadge() : ''}<span class="muted">›</span></div>
+        ${s.frozen_at && (fin || inDone) ? `<div class="muted small song-final">${fin ? 'Version finale : ' + esc(fin.title || 'Sans titre') : ''}${inDone ? (fin ? ' · ' : '') + 'le ' + esc(fmtShort(s.frozen_at)) : ''}</div>` : ''}
+        ${dotsHtml(s.song_progress)}
+      </div>
+    </a>`;
+}
 async function viewSongs($app = APP) {
-  const songs = await q(db.from('songs').select('id,title,cover_path,song_progress(member,level)').order('title'));
+  const songs = await q(db.from('songs').select('id,title,cover_path,frozen_at,final_audio_id,song_progress(member,level),song_audio(id,title)').order('title'));
   const urlOf = await signedUrls(songs.map(s => s.cover_path));
   songs.forEach(s => { s.status = songStatus(s.song_progress); });
   const groups = ['en-cours', 'a-apprendre', 'pret'];
@@ -1730,24 +1757,26 @@ async function viewSongs($app = APP) {
     ${songs.length ? groups.map(g => {
       const list = songs.filter(s => s.status === g);
       if (!list.length) return '';
-      return `<h3>${SONG_STATUS[g]} (${list.length})</h3>` + list.map(s => `
-        <a class="card song-link row" style="gap:12px" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
-          ${coverThumb(s.title, urlOf(s.cover_path), 52)}
-          <div class="grow">
-            <div class="row between"><span class="title grow" style="font-size:17px">${esc(s.title)}</span><span class="muted">›</span></div>
-            ${dotsHtml(s.song_progress)}
-          </div>
-        </a>`).join('');
+      return `<h3>${SONG_STATUS[g]} (${list.length})</h3>` + list.map(s => songCard(s, urlOf)).join('');
     }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec le bouton + en bas à droite.</div>`}
+    ${(() => {
+      const done = songs.filter(s => s.frozen_at).sort((a, b) => (b.frozen_at || '').localeCompare(a.frozen_at || ''));
+      return done.length ? `<h3 class="done-head">${LOCK_ICO}Terminés (${done.length})</h3>` + done.map(s => songCard(s, urlOf, true)).join('') : '';
+    })()}
   `;
 }
 
+// ===== Morceau terminé (figé) =====
+const LOCK_ICO = '<svg class="ico-lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>';
+const doneBadge = () => `<span class="chip done">${LOCK_ICO}Terminé</span>`;
+const fmtShort = ts => new Date(ts).toLocaleDateString('fr-CH', { day: 'numeric', month: 'short', year: 'numeric' });
+
 // ===== Détail d'un morceau =====
-function fieldBlock(song, field, label, cls) {
+function fieldBlock(song, field, label, cls, locked) {
   const val = song[field] || '';
   return `
     <div class="row between" style="margin-top:22px"><h3 style="margin:0">${label}</h3>
-      <button class="btn-sm" data-act="toggle" data-target="edit-${field}" data-hide="show-${field}">Modifier</button></div>
+      ${locked ? '' : `<button class="btn-sm" data-act="toggle" data-target="edit-${field}" data-hide="show-${field}">Modifier</button>`}</div>
     <div id="show-${field}" style="margin-top:10px">
       ${val ? `<pre class="${cls}">${esc(val)}</pre>` : `<div class="muted small">Rien pour l'instant.</div>`}
     </div>
@@ -1776,6 +1805,8 @@ async function songHtml(id, hasPrev, hasNext) {
   const myLevel = levelOf(prog, state.me);
   const myNote = prog.find(p => p.member === state.me)?.note || '';
   const status = songStatus(prog);
+  const locked = !!song.frozen_at; // morceau terminé : plus rien ne change, sauf le niveau, les notes perso et les commentaires
+  const finalAudio = audios.find(a => a.id === song.final_audio_id);
   // File de lecture de ce morceau : tous ses enregistrements, le plus récent d'abord
   const queue = audios.map(a => ({ songId: song.id, audioId: a.id, title: song.title, audioTitle: a.title || 'Sans titre',
     url: urlOf(a.path), cover: coverUrl, bpm: song.bpm }));
@@ -1783,15 +1814,23 @@ async function songHtml(id, hasPrev, hasNext) {
     <a class="back" href="#/morceaux">‹ Morceaux</a>
     <div class="row between" style="align-items:center;margin:4px 0 14px">
       <h2 class="grow" id="songTitle" style="margin:0">${esc(song.title)}</h2>
-      <button class="btn-sm btn-icon btn-ghost" data-act="rename" data-id="${song.id}" aria-label="Renommer le morceau">
-        <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
+      ${locked ? '' : `<button class="btn-sm btn-icon btn-ghost" data-act="rename" data-id="${song.id}" aria-label="Renommer le morceau">
+        <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>`}
     </div>
     <p class="muted small swipe-hint" style="margin:-8px 0 14px">
       <span style="opacity:${hasPrev ? 1 : .25}">‹</span> glisse pour changer de morceau <span style="opacity:${hasNext ? 1 : .25}">›</span>
     </p>
 
+    ${locked ? `<div class="frozen-banner">
+      <div class="frozen-ico">${LOCK_ICO}</div>
+      <div class="grow">
+        <div class="frozen-title">Morceau terminé</div>
+        <div class="muted small">Le ${esc(fmtShort(song.frozen_at))}${song.frozen_by ? ' par ' + esc(song.frozen_by) : ''}${finalAudio ? ` · Version finale : <strong>${esc(finalAudio.title || 'Sans titre')}</strong>` : ''}</div>
+      </div>
+      <button class="btn-sm" data-act="unfreeze" data-id="${song.id}">Rouvrir</button>
+    </div>` : ''}
     <input type="file" accept="image/*" id="coverInput" class="file-hidden" data-change="cover" data-id="${song.id}" data-old="${esc(song.cover_path || '')}">
-    ${coverUrl ? `
+    ${locked ? (coverUrl ? `<img class="cover-big" src="${esc(coverUrl)}" alt="Pochette">` : '') : coverUrl ? `
       <img class="cover-big" src="${esc(coverUrl)}" alt="Pochette">
       <div class="row" style="justify-content:center;margin-bottom:14px">
         <label for="coverInput" class="btn btn-sm" style="line-height:28px">Changer la pochette</label>
@@ -1799,13 +1838,14 @@ async function songHtml(id, hasPrev, hasNext) {
       </div>`
       : `<label for="coverInput" class="cover-add">＋ Ajouter une pochette</label>`}
 
-    <span class="chip ${status}">${SONG_STATUS[status]}</span>
+    <span class="chip ${status}">${SONG_STATUS[status]}</span>${locked ? ' ' + doneBadge() : ''}
     <span class="muted small" style="margin-left:6px">calculé selon le niveau de chacun</span>
+    ${locked ? '' : `<button class="btn-sm freeze-btn" data-act="freeze" data-id="${song.id}">${LOCK_ICO}Marquer comme terminé</button>`}
 
     <div class="row" style="gap:10px;margin-top:14px">
       <label for="bpmInput" style="margin:0" class="grow">Tempo d'origine</label>
       <input id="bpmInput" type="number" inputmode="decimal" min="20" max="400" step="1" placeholder="—" value="${song.bpm ? Number(song.bpm) : ''}"
-        data-change="bpm" data-id="${song.id}" style="width:96px;text-align:right">
+        data-change="bpm" data-id="${song.id}" style="width:96px;text-align:right" ${locked ? 'disabled' : ''}>
       <span class="muted">BPM</span>
     </div>
 
@@ -1815,14 +1855,14 @@ async function songHtml(id, hasPrev, hasNext) {
         <button class="audio-play" data-act="playaudio" data-i="${i}" aria-label="Écouter ${esc(a.title || '')}">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
         <div class="grow" style="min-width:0">
-          <div style="font-weight:600">${esc(a.title || 'Sans titre')}</div>
+          <div style="font-weight:600">${esc(a.title || 'Sans titre')}${a.id === song.final_audio_id ? ' <span class="chip final">Version finale</span>' : ''}</div>
           <div class="muted small">${esc([a.added_by, fmtDate(String(a.created_at).slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }), a.size ? fmtSize(a.size) : ''].filter(Boolean).join(' · '))}</div>
         </div>
-        <button class="btn-sm btn-icon btn-ghost" data-act="renameaudio" data-id="${a.id}" data-title="${esc(a.title || '')}" aria-label="Renommer ${esc(a.title || '')}">
+        ${locked ? '' : `<button class="btn-sm btn-icon btn-ghost" data-act="renameaudio" data-id="${a.id}" data-title="${esc(a.title || '')}" aria-label="Renommer ${esc(a.title || '')}">
           <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
-        <button class="btn-sm btn-icon btn-ghost" data-act="delaudio" data-id="${a.id}" data-path="${esc(a.path)}" aria-label="Supprimer">✕</button>
+        <button class="btn-sm btn-icon btn-ghost" data-act="delaudio" data-id="${a.id}" data-path="${esc(a.path)}" aria-label="Supprimer">✕</button>`}
       </div>`).join('')}
-    <div class="card">
+    <div class="card${locked ? ' hidden' : ''}">
       <label style="margin-top:0">Ajouter un enregistrement (MP3 ou M4A conseillés, 50 Mo max)</label>
       <input type="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" id="audioFile" class="file-hidden" data-change="audiofile">
       <label for="audioFile" id="audioPick" class="pick">
@@ -1868,17 +1908,18 @@ async function songHtml(id, hasPrev, hasNext) {
               <span class="muted small">${esc([f.pages ? f.pages + ' page' + (f.pages > 1 ? 's' : '') : (f.kind === 'image' ? 'Photo' : ''), f.size ? fmtSize(f.size) : '', f.added_by].filter(Boolean).join(' · '))}</span>
             </span>
           </button>
-          <button class="btn-sm btn-icon btn-ghost" data-act="renamefile" data-id="${f.id}" data-title="${esc(f.title || '')}" aria-label="Renommer ${esc(f.title || '')}">
+          ${locked ? '' : `<button class="btn-sm btn-icon btn-ghost" data-act="renamefile" data-id="${f.id}" data-title="${esc(f.title || '')}" aria-label="Renommer ${esc(f.title || '')}">
             <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
-          <button class="btn-sm btn-icon btn-ghost" data-act="delfile" data-id="${f.id}" data-path="${esc(f.path)}" data-title="${esc(f.title || '')}" aria-label="Supprimer">✕</button>
+          <button class="btn-sm btn-icon btn-ghost" data-act="delfile" data-id="${f.id}" data-path="${esc(f.path)}" data-title="${esc(f.title || '')}" aria-label="Supprimer">✕</button>`}
         </div>`).join('')}
+      ${locked && !files.length ? '<div class="muted small">Aucune tablature.</div>' : ''}
       <input type="file" accept="application/pdf,image/*" id="tabFile" class="file-hidden" data-change="tabfile" data-song="${song.id}">
-      <label for="tabFile" class="pick" ${files.length ? 'style="margin-top:12px"' : ''}>
+      <label for="tabFile" class="pick${locked ? ' hidden' : ''}" ${files.length ? 'style="margin-top:12px"' : ''}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
         Ajouter un PDF ou une photo</label>
     </div>
-    ${fieldBlock(song, 'lyrics', 'Paroles', 'lyrics')}
-    ${fieldBlock(song, 'notes', 'Notes', 'lyrics')}
+    ${fieldBlock(song, 'lyrics', 'Paroles', 'lyrics', locked)}
+    ${fieldBlock(song, 'notes', 'Notes', 'lyrics', locked)}
 
     <h3>Historique en répète (${history.length})</h3>
     <div class="card">
@@ -1889,7 +1930,8 @@ async function songHtml(id, hasPrev, hasNext) {
         </a>`).join('') : `<div class="muted small">Ce morceau n'a encore été dans aucune setlist.</div>`}
     </div>
 
-    <button class="btn-danger full" style="margin-top:24px" data-act="delsong" data-id="${song.id}">Supprimer ce morceau</button>
+    ${locked ? `<p class="muted small" style="margin-top:24px;text-align:center">Rouvre le morceau pour le modifier ou le supprimer.</p>`
+      : `<button class="btn-danger full" style="margin-top:24px" data-act="delsong" data-id="${song.id}">Supprimer ce morceau</button>`}
   `;
   return { html, queue };
 }
@@ -1939,20 +1981,25 @@ function fmtAgo(ts) {
 }
 async function viewListen($app = APP) {
   const [songs, heard] = await Promise.all([
-    q(db.from('songs').select('id,title,cover_path,bpm,song_audio(id,title,path,created_at,added_by,audio_comments(count))')),
+    q(db.from('songs').select('id,title,cover_path,bpm,final_audio_id,song_audio(id,title,path,created_at,added_by,audio_comments(count))')),
     q(db.from('audio_listens').select('audio_id').eq('member', state.me)),
   ]);
   Listen.heard = new Set((heard || []).map(h => h.audio_id));
   const byDate = (x, y) => (y.created_at || '').localeCompare(x.created_at || '');
   const list = songs.filter(s => (s.song_audio || []).length)
-    .map(s => ({ ...s, recs: [...s.song_audio].sort(byDate) }))
+    .map(s => {
+      const recs = [...s.song_audio].sort(byDate);
+      const f = recs.findIndex(a => a.id === s.final_audio_id); // morceau terminé : sa version finale passe devant
+      if (f > 0) recs.unshift(recs.splice(f, 1)[0]);
+      return { ...s, recs };
+    })
     .sort((a, b) => byDate(a.recs[0], b.recs[0]));
   const urlOf = await signedUrls(list.flatMap(s => [s.cover_path, ...s.recs.map(a => a.path)]));
   state.listenAll = {};
   list.forEach(s => s.recs.forEach(a => {
     state.listenAll[a.id] = { songId: s.id, audioId: a.id, title: s.title, audioTitle: a.title || 'Sans titre', url: urlOf(a.path),
       cover: urlOf(s.cover_path), bpm: s.bpm, addedBy: a.added_by, createdAt: a.created_at,
-      nComments: (a.audio_comments && a.audio_comments[0] && a.audio_comments[0].count) || 0 };
+      nComments: (a.audio_comments && a.audio_comments[0] && a.audio_comments[0].count) || 0, isFinal: a.id === s.final_audio_id };
   }));
   // « Tout lire » et la suite de la lecture : la dernière version de chaque morceau, dans l'ordre de la liste
   state.listenQueue = list.map(s => state.listenAll[s.recs[0].id]);
@@ -1964,7 +2011,7 @@ async function viewListen($app = APP) {
     <div class="lrow${ver ? ' lver' : ''}${isNew(a) ? ' new' : ''}" data-act="lplay" data-audio="${a.id}"${i != null ? ` data-i="${i}"` : ''}>
       ${ver ? '' : coverThumb(t.title, t.cover, 46)}
       <div class="grow lrow-text">
-        <div class="lrow-title">${eq}<span class="lrow-name">${esc(ver ? t.audioTitle : t.title)}</span></div>
+        <div class="lrow-title">${eq}<span class="lrow-name">${esc(ver ? t.audioTitle : t.title)}</span>${t.isFinal ? `<span class="chip final">${ver ? 'Finale' : 'Version finale'}</span>` : ''}</div>
         <div class="muted small lrow-sub">${esc((ver ? [t.addedBy, fmtAgo(t.createdAt)] : [t.audioTitle, t.addedBy, fmtAgo(t.createdAt)]).filter(Boolean).join(' · '))}</div>
       </div>
       ${t.nComments ? `<span class="lrow-cm" title="${t.nComments} commentaire${t.nComments > 1 ? 's' : ''}">💬 ${t.nComments}</span>` : ''}
@@ -3596,6 +3643,34 @@ const actions = {
     notify('song_text', what[0], `${state.me} a modifié ${what[1]} de « ${song} »`, '#/morceau/' + el.dataset.id, `text:${el.dataset.id}:${f}`);
   },
   rename(el) { openRenameSheet('song', el.dataset.id, document.getElementById('songTitle').textContent); },
+  // Marquer un morceau comme terminé : on choisit la version finale parmi ses enregistrements
+  async freeze(el) {
+    const id = el.dataset.id;
+    const s = await q(db.from('songs').select('id,title,song_audio(id,title,created_at,added_by)').eq('id', id).maybeSingle());
+    if (!s) return;
+    const recs = [...(s.song_audio || [])].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    Sheet.open('freeze', `
+      <h2 style="margin:6px 0 6px">Marquer comme terminé</h2>
+      <p class="muted small" style="margin:0 0 12px">« ${esc(s.title)} » sera figé : titre, BPM, pochette, paroles, notes, enregistrements et tablatures ne pourront plus être modifiés, jusqu'à ce que quelqu'un le rouvre. Le niveau de chacun, les notes perso et les commentaires restent libres.</p>
+      <input type="hidden" name="id" value="${esc(id)}">
+      <input type="hidden" name="title" value="${esc(s.title)}">
+      ${recs.length ? `<label style="margin-top:0">Version finale</label>
+        ${recs.map((a, i) => `<label class="check"><input type="radio" name="final" value="${a.id}" ${i === 0 ? 'checked' : ''}>
+          <span class="grow">${esc(a.title || 'Sans titre')}<span class="muted small" style="display:block">${esc([a.added_by, fmtShort(a.created_at)].filter(Boolean).join(' · '))}</span></span></label>`).join('')}
+        <label class="check"><input type="radio" name="final" value=""><span class="grow muted">Pas de version finale</span></label>`
+      : `<p class="muted small">Ce morceau n'a pas encore d'enregistrement : pas de version finale.</p>`}`, `
+      <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
+      <button type="submit" class="btn-accent grow">Terminer le morceau</button>`);
+  },
+  async unfreeze(el) {
+    if (!confirm('Rouvrir ce morceau ? Il sera de nouveau modifiable par tout le monde.')) return;
+    const id = el.dataset.id, title = document.getElementById('songTitle')?.textContent || '';
+    lastLocalAction = Date.now();
+    await q(db.from('songs').update({ frozen_at: null, frozen_by: null, final_audio_id: null }).eq('id', id));
+    toast('Morceau rouvert');
+    route();
+    notify('song_text', 'Morceau rouvert', `${state.me} a rouvert « ${title} » : il est de nouveau modifiable`, '#/morceau/' + id, 'freeze:' + id);
+  },
   renameaudio(el) { openRenameSheet('audio', el.dataset.id, el.dataset.title); },
   openfile(el) {
     const f = state.fileIndex[el.dataset.id];
@@ -3781,6 +3856,13 @@ document.addEventListener('submit', async e => {
       const song = document.getElementById('songTitle')?.textContent || '';
       afterSheet(null);
       notify('song_text', 'Nouvelle tablature', `${state.me} a ajouté la tablature « ${title} » (${isPdf ? 'PDF' : 'photo'}) à « ${song} »`, '#/morceau/' + songId, 'file:' + songId);
+    } else if (form.dataset.form === 'freeze') {
+      const final = d.final || null;
+      await q(db.from('songs').update({ frozen_at: new Date().toISOString(), frozen_by: state.me, final_audio_id: final }).eq('id', d.id));
+      const finTitle = final ? (form.querySelector(`input[name=final][value="${final}"]`)?.closest('label')?.querySelector('.grow')?.firstChild?.textContent || '').trim() : '';
+      toast('Morceau terminé');
+      afterSheet(null);
+      notify('song_text', 'Morceau terminé', `${state.me} a marqué « ${d.title} » comme terminé${finTitle ? ` (version finale : ${finTitle})` : ''}`, '#/morceau/' + d.id, 'freeze:' + d.id);
     } else if (form.dataset.form === 'renameFile') {
       const title = (d.title || '').trim();
       if (!title) { toast('Le titre ne peut pas être vide'); return; }
