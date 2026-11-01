@@ -30,6 +30,30 @@ header.top{position:sticky;top:0;z-index:5;background:rgba(18,18,20,.94);backdro
   display:flex;align-items:center;justify-content:space-between;gap:12px}
 header.top h1{margin:0;font-size:20px;letter-spacing:.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 header.top .me{font-size:14px;color:var(--muted);white-space:nowrap}
+.bell{position:relative;display:flex;align-items:center;justify-content:center;width:40px;height:40px;margin:-6px -8px -6px 0;border-radius:50%;color:var(--text)}
+.bell svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.bell.on{color:var(--accent)}
+.bell-count{position:absolute;top:3px;right:2px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;
+  font-size:11px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px var(--bg)}
+.notif-list{padding:4px 0}
+.notif{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.notif:last-child{border-bottom:0}
+.notif.unread{background:rgba(232,100,58,.07)}
+.notif-ico{flex:none;width:34px;height:34px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.notif.unread .notif-ico{color:var(--accent)}
+.notif-ico svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+.notif-title{display:block;font-weight:650;font-size:15px}
+.notif-body{display:block;color:var(--muted);font-size:14px;line-height:1.4;margin-top:2px;overflow-wrap:anywhere}
+.notif.unread .notif-body{color:#cfcfd6}
+.notif-time{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.notif-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent);margin-top:6px}
+.switch-row{display:flex;align-items:center;gap:12px;color:var(--text);font-size:15px;margin:0;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.switch-row:last-child{border-bottom:0}
+input.switch{appearance:none;-webkit-appearance:none;flex:none;width:46px;height:28px;padding:0;margin:0;border-radius:14px;border:0;background:var(--border);position:relative;cursor:pointer;transition:background .2s}
+input.switch::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .2s}
+input.switch:checked{background:var(--accent)}
+input.switch:checked::after{transform:translateX(18px)}
+input.switch:focus{outline:2px solid var(--accent);outline-offset:2px}
 main{padding:16px 16px calc(160px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
 .fab{position:fixed;right:max(16px, calc((100vw - 720px) / 2 + 16px));bottom:calc(78px + env(safe-area-inset-bottom));z-index:6;
   width:58px;height:58px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;
@@ -208,7 +232,13 @@ body{overflow-x:clip}
 <body>
 <header class="top">
   <h1 id="bandName">…</h1>
-  <a href="#/reglages" class="me" id="meLabel"></a>
+  <div class="row" style="gap:12px;flex:none">
+    <a href="#/reglages" class="me" id="meLabel"></a>
+    <a href="#/notifications" id="bell" class="bell hidden" aria-label="Notifications">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>
+      <span id="bellCount" class="bell-count hidden">0</span>
+    </a>
+  </div>
 </header>
 <main id="app"><div class="loading">Chargement…</div></main>
 <nav class="bottom" id="nav">
@@ -489,6 +519,7 @@ async function route() {
     const t = a.dataset.tab;
     a.classList.toggle('on', t === view || (t === 'repetes' && view === 'repete') || (t === 'morceaux' && view === 'morceau'));
   });
+  document.getElementById('bell').classList.toggle('on', view === 'notifications');
   if (!state.me) return viewPicker();
   try {
     if (view === 'repete' && id) await viewRehearsal(id);
@@ -497,6 +528,7 @@ async function route() {
     else if (view === 'reglages') await viewSettings();
     else if (view === 'calendrier') await viewCalendar(id);
     else if (view === 'ecoute') await viewListen();
+    else if (view === 'notifications') await viewNotifications();
     else await viewRehearsals();
   } catch (e) {
     $app.innerHTML = `<div class="empty">Impossible de charger les données.<br><br><button onclick="route()">Réessayer</button></div>`;
@@ -509,6 +541,7 @@ function viewLogin() {
   document.getElementById('nav').classList.add('hidden');
   document.getElementById('bandName').textContent = 'Répètes';
   document.getElementById('meLabel').textContent = '';
+  document.getElementById('bell').classList.add('hidden');
   $app.innerHTML = `
     <div class="picker">
       <img src="icon-192.png" alt="" style="width:88px;height:88px;border-radius:20px">
@@ -528,7 +561,13 @@ async function start() {
     $app.innerHTML = `<div class="empty">Connexion à la base impossible.<br>Vérifie ta connexion internet.<br><br><button onclick="location.reload()">Réessayer</button></div>`;
     return;
   }
+  // Ouverture depuis une notification : on la marque comme lue
+  const nid = new URLSearchParams(location.search).get('nid');
+  if (nid) { history.replaceState(null, '', location.pathname + location.hash); markRead(nid); }
   route();
+  updateBell();
+  startRealtime();
+  Push.sync();
 }
 
 // ===== Choix du membre =====
@@ -1035,9 +1074,12 @@ function initSetlistSort() {
       if (evt.oldIndex === evt.newIndex) return;
       const ids = [...list.querySelectorAll('.set-item')].map(el => el.dataset.id);
       list.querySelectorAll('.set-num').forEach((el, i) => { el.textContent = i + 1; });
+      lastLocalAction = Date.now();
       try {
         await Promise.all(ids.map((id, i) => q(db.from('setlist_items').update({ position: i }).eq('id', id))));
         toast('Ordre enregistré');
+        lastLocalAction = Date.now();
+        notifySetlist(currentRehId(), "a changé l'ordre de la setlist");
       } catch (e) { route(); }
     },
   });
@@ -1286,6 +1328,256 @@ const Player = {
   }
 })();
 
+// ===== Notifications =====
+const VAPID_PUBLIC = 'BLJVixBRCD7zUHzyhjAFMAFokjHId_cOUjUp8HMn460WNROMMp0EkTVDXws5HbpB68pO08SV4XFsVdx_FGLl5dE';
+const NOTIF_TYPES = [
+  { group: 'Répètes', icon: 'cal', items: [
+    ['reh_new', 'Nouvelle répète'], ['reh_edit', 'Date, heure ou lieu modifié'], ['reh_delete', 'Répète supprimée'],
+    ['dispo', 'Dispos des autres'], ['vote_open', 'Ouverture du vote « On répète quand même ? »'], ['vote', 'Votes des autres'],
+    ['reh_status', 'Répète maintenue ou annulée'], ['setlist', 'Setlist modifiée'], ['bilan', 'Bilan de répète'],
+    ['setlist_note', 'Notes sur les morceaux d\'une répète']] },
+  { group: 'Morceaux', icon: 'song', items: [
+    ['song_new', 'Nouveau morceau'], ['song_text', 'Paroles, tabs, notes et titre'], ['level', 'Niveau des autres'],
+    ['perso_note', 'Notes perso des autres'], ['audio', 'Enregistrements'], ['cover', 'Pochettes'], ['song_delete', 'Morceau supprimé']] },
+  { group: 'Rappels', icon: 'clock', items: [['reminder', 'Rappel avant la répète'], ['dispo_reminder', 'Rappel si tu n\'as pas donné ta dispo']] },
+  { group: 'Groupe', icon: 'group', items: [['group', 'Nom du groupe et membres']] },
+];
+const TYPE_ICON = Object.fromEntries(NOTIF_TYPES.flatMap(g => g.items.map(([t]) => [t, g.icon])));
+const ICONS = {
+  cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  song: '<path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  group: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M15.5 14.2A4.6 4.6 0 0 1 21 18.5"/>',
+};
+const DEFAULT_PREFS = { disabled_types: [], reminders: [{ days: 1, time: '18:00' }], dispo_reminders: [{ days: 3, time: '18:00' }, { days: 1, time: '18:00' }] };
+const DAY_CHOICES = [[0, 'Le jour même'], [1, 'La veille'], [2, '2 jours avant'], [3, '3 jours avant']];
+
+// Envoie une notification aux autres membres (sans attendre, une erreur ne bloque jamais l'app)
+function notify(type, title, body, link, groupKey) {
+  if (!state.me) return;
+  db.functions.invoke('notify', { body: { type, actor: state.me, title, body, link: link || '', group_key: groupKey || null } }).catch(() => {});
+}
+const short = (s, n = 90) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+const rehWhen = r => r ? fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'short' }) : 'une répète';
+async function rehSnapshot(id) {
+  const { data } = await db.from('rehearsals').select('id,date,time,place,availability(member,status),rehearsal_votes(member,vote)').eq('id', id).maybeSingle();
+  return data;
+}
+// Notifie l'ouverture du vote, ou une répète maintenue / annulée / rétablie
+function notifyStatusChange(before, after) {
+  if (!after) return;
+  const b = before ? rehState(before).s : 'normal';
+  const st = rehState(after), a = st.s;
+  if (a === b) return;
+  const when = rehWhen(after), link = '#/repete/' + after.id, abs = st.absents.join(', ');
+  if (a === 'vote') notify('vote_open', 'On répète quand même ?', `Il manque ${abs} pour ${when} : le vote est ouvert.`, link, 'status:' + after.id);
+  else if (a === 'maintenue') notify('reh_status', 'Répète maintenue', `La répète du ${when} est maintenue${abs ? ' sans ' + abs : ''}.`, link, 'status:' + after.id);
+  else if (a === 'annulee') notify('reh_status', 'Répète annulée', `La répète du ${when} est annulée (absent${st.absents.length > 1 ? 's' : ''} : ${abs}).`, link, 'status:' + after.id);
+  else if (b === 'annulee') notify('reh_status', 'Répète rétablie', `La répète du ${when} n'est plus annulée.`, link, 'status:' + after.id);
+}
+const currentRehId = () => (location.hash.match(/^#\/repete\/([^/]+)/) || [])[1];
+
+// ----- Cloche et compteur -----
+async function updateBell() {
+  const bell = document.getElementById('bell');
+  if (!state.authed || !state.me) { bell.classList.add('hidden'); return; }
+  bell.classList.remove('hidden');
+  const { count } = await db.from('notifications').select('id', { count: 'exact', head: true }).eq('member', state.me).is('read_at', null);
+  const n = count || 0;
+  const badge = document.getElementById('bellCount');
+  badge.textContent = n > 99 ? '99+' : n;
+  badge.classList.toggle('hidden', !n);
+  bell.setAttribute('aria-label', n ? `Notifications, ${n} non lue${n > 1 ? 's' : ''}` : 'Notifications');
+  try { if (navigator.setAppBadge) n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } catch (e) {}
+}
+async function markRead(id) {
+  if (!id) return;
+  await db.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', id).is('read_at', null);
+  updateBell();
+}
+
+// ----- Page des notifications -----
+async function viewNotifications() {
+  const list = await q(db.from('notifications').select('*').eq('member', state.me).order('created_at', { ascending: false }).limit(200));
+  const today = todayISO();
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString('sv-SE'); })();
+  const dayLabel = iso => iso === today ? "Aujourd'hui" : iso === yesterday ? 'Hier' : fmtDate(iso, { weekday: 'long', day: 'numeric', month: 'long' });
+  const groups = [];
+  list.forEach(n => {
+    const iso = new Date(n.created_at).toLocaleDateString('sv-SE');
+    if (!groups.length || groups[groups.length - 1].iso !== iso) groups.push({ iso, items: [] });
+    groups[groups.length - 1].items.push(n);
+  });
+  const unread = list.filter(n => !n.read_at).length;
+  const pushOff = !Push.supported || Notification.permission !== 'granted';
+  $app.innerHTML = `
+    <div class="row between"><h2>Notifications</h2>
+      ${unread ? `<button class="btn-sm" data-act="markall">Tout marquer comme lu</button>` : ''}</div>
+    ${pushOff ? `<a class="card row" style="gap:12px" href="#/reglages"><span class="muted small grow">Les notifications ne sont pas activées sur cet appareil. Active-les dans Réglages pour être prévenu même app fermée.</span><span class="muted">›</span></a>` : ''}
+    ${groups.length ? groups.map(g => `
+      <h3 class="cap">${esc(dayLabel(g.iso))}</h3>
+      <div class="card notif-list">${g.items.map(n => `
+        <a class="notif ${n.read_at ? '' : 'unread'}" data-act="opennotif" data-id="${n.id}" data-link="${esc(n.link)}" href="${esc(n.link || '#/notifications')}">
+          <span class="notif-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[TYPE_ICON[n.type] || 'cal']}</svg></span>
+          <span class="grow" style="min-width:0">
+            <span class="notif-title">${esc(n.title)}</span>
+            <span class="notif-body">${esc(n.body)}</span>
+            <span class="notif-time">${new Date(n.created_at).toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' })}</span>
+          </span>
+          ${n.read_at ? '' : '<span class="notif-dot" aria-label="Non lue"></span>'}
+        </a>`).join('')}</div>`).join('')
+      : `<div class="empty">Aucune notification pour l'instant.</div>`}
+    ${list.length ? `<p class="muted small" style="text-align:center">Les notifications de plus de 60 jours sont effacées automatiquement.</p>` : ''}
+  `;
+}
+
+// ----- Abonnement du téléphone aux notifications push -----
+function b64uToU8(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '=';
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('délai')), ms))]);
+const Push = {
+  supported: 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window,
+  async reg() { return withTimeout(navigator.serviceWorker.ready, 4000); },
+  async current() { try { return await (await Push.reg()).pushManager.getSubscription(); } catch (e) { return null; } },
+  async save(sub) {
+    const j = sub.toJSON();
+    await q(db.from('push_subscriptions').upsert({ member: state.me, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth,
+      user_agent: navigator.userAgent.slice(0, 200) }, { onConflict: 'endpoint' }));
+  },
+  async enable() {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Notifications refusées : autorise-les dans les réglages du téléphone'); return false; }
+    const reg = await Push.reg();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToU8(VAPID_PUBLIC) });
+    await Push.save(sub);
+    return true;
+  },
+  async disable() {
+    const sub = await Push.current();
+    if (!sub) return;
+    await db.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+    try { await sub.unsubscribe(); } catch (e) {}
+  },
+  // Au démarrage et quand on change de nom : rattache ce téléphone au bon membre
+  async sync() {
+    if (!Push.supported || Notification.permission !== 'granted' || !state.me) return;
+    const sub = await Push.current();
+    if (sub) await Push.save(sub).catch(() => {});
+  },
+};
+
+// ----- Réglages des notifications -----
+async function loadPrefs() {
+  const { data } = await db.from('notif_prefs').select('*').eq('member', state.me).maybeSingle();
+  state.prefs = { ...DEFAULT_PREFS, ...(data || {}) };
+  state.prefs.disabled_types = state.prefs.disabled_types || [];
+}
+async function savePrefs() {
+  const p = state.prefs;
+  await q(db.from('notif_prefs').upsert({ member: state.me, disabled_types: p.disabled_types, reminders: p.reminders,
+    dispo_reminders: p.dispo_reminders, updated_at: new Date().toISOString() }, { onConflict: 'member' }));
+}
+function slotsHtml(kind) {
+  const slots = state.prefs[kind] || [];
+  return `${slots.length ? slots.map((s, i) => `
+    <div class="row" style="gap:8px;margin-bottom:8px">
+      <select class="grow" data-change="remday" data-kind="${kind}" data-i="${i}">
+        ${DAY_CHOICES.map(([d, l]) => `<option value="${d}" ${Number(s.days) === d ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <input type="time" style="width:136px;flex:none" data-change="remtime" data-kind="${kind}" data-i="${i}" value="${esc(s.time)}">
+      <button class="btn-sm btn-icon btn-ghost" data-act="remdel" data-kind="${kind}" data-i="${i}" aria-label="Retirer ce rappel">✕</button>
+    </div>`).join('') : `<div class="muted small" style="margin-bottom:8px">Aucun rappel.</div>`}
+    ${slots.length < 3 ? `<button class="btn-sm" data-act="remadd" data-kind="${kind}">+ Ajouter un rappel</button>` : ''}`;
+}
+async function pushCardHtml() {
+  if (!Push.supported) {
+    return isIOS() && !isStandalone()
+      ? `<div class="muted small">Sur iPhone, ajoute d'abord l'app à l'écran d'accueil (Partager › « Sur l'écran d'accueil »), puis ouvre-la depuis l'icône pour activer les notifications.</div>`
+      : `<div class="muted small">Ce navigateur ne permet pas les notifications. Essaie avec Chrome (Android) ou depuis l'icône de l'écran d'accueil (iPhone).</div>`;
+  }
+  if (Notification.permission === 'denied') return `<div class="muted small">Les notifications sont bloquées pour cette app. Autorise-les dans les réglages du navigateur ou du téléphone, puis reviens ici.</div>`;
+  const sub = Notification.permission === 'granted' ? await Push.current() : null;
+  return sub
+    ? `<div class="row between"><span><span class="pill ok" style="font-size:13px">Activées sur cet appareil</span></span>
+        <button class="btn-sm btn-ghost" data-act="pushoff">Désactiver</button></div>`
+    : `<p class="muted small" style="margin:0 0 10px">Reçois une alerte sur cet appareil à chaque changement, même quand l'app est fermée.</p>
+       <button class="btn-accent full" data-act="pushon">Activer les notifications</button>`;
+}
+async function renderNotifSettings() {
+  const box = document.getElementById('notifSettings');
+  if (!box) return;
+  const p = state.prefs;
+  box.innerHTML = `
+    <div class="card" id="pushCard">${await pushCardHtml()}</div>
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:10px">Rappel avant la répète</div>
+      ${slotsHtml('reminders')}
+    </div>
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:4px">Rappel si tu n'as pas donné ta dispo</div>
+      <div class="muted small" style="margin-bottom:10px">Envoyé seulement si tu n'as pas encore répondu.</div>
+      ${slotsHtml('dispo_reminders')}
+    </div>
+    ${NOTIF_TYPES.map(g => `
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:4px">${g.group}</div>
+        ${g.items.map(([t, l]) => `
+          <label class="switch-row"><span class="grow">${l}</span>
+            <input type="checkbox" class="switch" data-change="ntype" value="${t}" ${p.disabled_types.includes(t) ? '' : 'checked'}></label>`).join('')}
+      </div>`).join('')}
+    <p class="muted small">Tu ne reçois jamais de notification pour tes propres changements.</p>`;
+}
+
+// ----- Temps réel : la cloche et les pages se mettent à jour toutes seules -----
+let rtChannel = null, rtTimer = null, lastLocalAction = 0;
+async function startRealtime() {
+  try {
+    if (rtChannel) db.removeChannel(rtChannel);
+    const { data } = await db.auth.getSession();
+    if (data?.session && db.realtime?.setAuth) db.realtime.setAuth(data.session.access_token);
+    rtChannel = db.channel('repetes-live')
+      .on('postgres_changes', { event: '*', schema: 'public' }, onRealtime)
+      .subscribe();
+  } catch (e) {}
+}
+function stopRealtime() { if (rtChannel) { db.removeChannel(rtChannel); rtChannel = null; } }
+function onRealtime(p) {
+  if (p.table === 'notifications') {
+    const row = (p.new && Object.keys(p.new).length) ? p.new : p.old;
+    if (!row || row.member !== state.me) return;
+    updateBell();
+    if (p.eventType === 'INSERT' && document.visibilityState === 'visible') toast(short(`${p.new.title} · ${p.new.body}`, 80));
+    if (location.hash.startsWith('#/notifications')) scheduleRefresh();
+    return;
+  }
+  if (['push_subscriptions', 'notif_prefs', 'reminder_log'].includes(p.table)) return;
+  scheduleRefresh();
+}
+// Ne redessine pas la page si on est en train d'écrire, d'écouter ou de glisser
+function busyEditing() {
+  return Sheet.isOpen || (Swipe && Swipe.g) || document.querySelector('.swipe-vp[data-busy]')
+    || document.querySelector('textarea:focus, input:focus, select:focus')
+    || document.querySelector('#editReh:not(.hidden), [id^="edit-"]:not(.hidden), #audioChosen:not(.hidden)')
+    || [...document.querySelectorAll('main audio')].some(a => !a.paused);
+}
+function scheduleRefresh() {
+  clearTimeout(rtTimer);
+  rtTimer = setTimeout(async () => {
+    if (!state.authed || !state.me) return;
+    if (busyEditing()) return scheduleRefresh();
+    if (Date.now() - lastLocalAction < 1500) return; // notre propre changement est déjà affiché
+    const y = window.scrollY;
+    if (location.hash.startsWith('#/reglages')) return; // pas de rechargement pendant les réglages
+    await route();
+    window.scrollTo(0, y);
+  }, 700);
+}
+
 // ===== Réglages =====
 async function viewSettings() {
   await loadBase();
@@ -1301,6 +1593,8 @@ async function viewSettings() {
       <span>Tu es <strong>${esc(state.me)}</strong></span>
       <button class="btn-sm" data-act="changeme">Changer</button>
     </div>
+    <h3>Notifications</h3>
+    <div id="notifSettings"><div class="card muted small">Chargement…</div></div>
     <h3>Connexion</h3>
     <div class="card row between">
       <span class="muted small">Connecté avec le mot de passe du groupe</span>
@@ -1317,30 +1611,71 @@ async function viewSettings() {
     </div>
     <p class="muted small" style="margin-top:24px">Astuce : ajoute l'app à l'écran d'accueil de ton téléphone (menu Partager › « Sur l'écran d'accueil » sur iPhone, menu ⋮ › « Ajouter à l'écran d'accueil » sur Android).</p>
   `;
+  await loadPrefs();
+  await renderNotifSettings();
 }
 
 // ===== Actions (clics) =====
 const actions = {
-  async pick(el) { setMe(el.dataset.name); document.getElementById('meLabel').textContent = '👤 ' + state.me; route(); },
+  async pick(el) {
+    setMe(el.dataset.name); document.getElementById('meLabel').textContent = '👤 ' + state.me;
+    route(); updateBell(); Push.sync();
+  },
+  async pushon() {
+    try { if (await Push.enable()) toast('Notifications activées sur cet appareil'); }
+    catch (e) { toast('Activation impossible : ' + (e.message || e)); }
+    renderNotifSettings();
+  },
+  async pushoff() {
+    await Push.disable();
+    toast('Notifications désactivées sur cet appareil');
+    renderNotifSettings();
+  },
+  async remadd(el) {
+    const k = el.dataset.kind;
+    state.prefs[k] = [...(state.prefs[k] || []), { days: 0, time: '17:00' }];
+    await savePrefs(); renderNotifSettings();
+  },
+  async remdel(el) {
+    const k = el.dataset.kind;
+    state.prefs[k] = (state.prefs[k] || []).filter((_, i) => i !== Number(el.dataset.i));
+    await savePrefs(); renderNotifSettings();
+  },
+  async opennotif(el) {
+    markRead(el.dataset.id);
+    go(el.dataset.link || '#/notifications');
+  },
+  async markall() {
+    await q(db.from('notifications').update({ read_at: new Date().toISOString() }).eq('member', state.me).is('read_at', null));
+    updateBell(); route();
+  },
   toggle(el) {
     document.getElementById(el.dataset.target)?.classList.toggle('hidden');
     if (el.dataset.hide) document.getElementById(el.dataset.hide)?.classList.toggle('hidden');
   },
   async vote(el) {
+    const id = el.dataset.id, before = await rehSnapshot(id);
     await q(db.from('availability').upsert(
-      { rehearsal_id: el.dataset.id, member: state.me, status: el.dataset.s, updated_at: new Date().toISOString() },
+      { rehearsal_id: id, member: state.me, status: el.dataset.s, updated_at: new Date().toISOString() },
       { onConflict: 'rehearsal_id,member' }));
     route();
+    const after = await rehSnapshot(id);
+    notify('dispo', 'Dispo', `${state.me} : ${VOTE_BY_KEY[el.dataset.s].label} pour ${rehWhen(after)}`, '#/repete/' + id, 'dispo:' + id);
+    notifyStatusChange(before, after);
   },
   async addset(el) {
     const sel = document.getElementById('addSong');
     if (!sel?.value) return;
+    const title = sel.options[sel.selectedIndex]?.text || '';
     await q(db.from('setlist_items').insert({ rehearsal_id: el.dataset.id, song_id: sel.value, position: Number(el.dataset.next) }));
     route();
+    notifySetlist(el.dataset.id, `a ajouté « ${title} » à la setlist`);
   },
   async unset(el) {
+    const title = el.closest('.set-item')?.querySelector('.title')?.textContent || '';
     await q(db.from('setlist_items').delete().eq('id', el.dataset.id));
     route();
+    notifySetlist(currentRehId(), `a retiré « ${title} » de la setlist`);
   },
   async addall(el) {
     const ids = state.availableSongs || [];
@@ -1349,12 +1684,14 @@ const actions = {
     await q(db.from('setlist_items').insert(ids.map((song_id, i) => ({ rehearsal_id: el.dataset.id, song_id, position: start + i }))));
     toast(`${ids.length} morceau${ids.length > 1 ? 'x ajoutés' : ' ajouté'}`);
     route();
+    notifySetlist(el.dataset.id, `a ajouté ${ids.length} morceau${ids.length > 1 ? 'x' : ''} à la setlist`);
   },
   async clearset(el) {
     if (!confirm('Vider toute la setlist de cette répète ? Les notes par morceau de cette répète seront aussi effacées.')) return;
     await q(db.from('setlist_items').delete().eq('rehearsal_id', el.dataset.id));
     toast('Setlist vidée');
     route();
+    notifySetlist(el.dataset.id, 'a vidé la setlist');
   },
   async newreh(el) {
     const fromCal = !!el.dataset.date;
@@ -1369,10 +1706,15 @@ const actions = {
     el.textContent = allOn ? 'Tout cocher' : 'Tout décocher';
   },
   async decide(el) {
+    const id = el.dataset.id, before = await rehSnapshot(id);
     await q(db.from('rehearsal_votes').upsert(
-      { rehearsal_id: el.dataset.id, member: state.me, vote: el.dataset.v, updated_at: new Date().toISOString() },
+      { rehearsal_id: id, member: state.me, vote: el.dataset.v, updated_at: new Date().toISOString() },
       { onConflict: 'rehearsal_id,member' }));
     route();
+    const after = await rehSnapshot(id);
+    const label = el.dataset.v === 'maintenir' ? 'On maintient' : 'On annule';
+    notify('vote', 'Vote', `${state.me} vote « ${label} » pour ${rehWhen(after)}`, '#/repete/' + id, 'vote:' + id);
+    notifyStatusChange(before, after);
   },
   playat(el) { Player.start(state.listenQueue || [], Number(el.dataset.i)); },
   rehmode(el) {
@@ -1389,25 +1731,34 @@ const actions = {
     await q(db.from('song_progress').upsert(
       { song_id: el.dataset.id, member: state.me, level: el.dataset.l, updated_at: new Date().toISOString() },
       { onConflict: 'song_id,member' }));
+    const song = document.getElementById('songTitle')?.textContent || '';
     route();
+    notify('level', 'Progression', `${state.me} : ${LEVEL_BY_KEY[el.dataset.l].label} sur « ${song} »`, '#/morceau/' + el.dataset.id, 'level:' + el.dataset.id);
   },
   async savenotes(el) {
-    await q(db.from('rehearsals').update({
-      done_notes: document.getElementById('doneNotes').value,
-      todo_notes: document.getElementById('todoNotes').value,
-    }).eq('id', el.dataset.id));
+    const done = document.getElementById('doneNotes').value, todo = document.getElementById('todoNotes').value;
+    await q(db.from('rehearsals').update({ done_notes: done, todo_notes: todo }).eq('id', el.dataset.id));
     toast('Bilan enregistré');
+    const r = await rehSnapshot(el.dataset.id);
+    const detail = done.trim() ? ` · Travaillé : ${short(done, 70)}` : todo.trim() ? ` · À bosser : ${short(todo, 70)}` : '';
+    notify('bilan', 'Bilan de répète', `${state.me} a mis à jour le bilan du ${rehWhen(r)}${detail}`, '#/repete/' + el.dataset.id, 'bilan:' + el.dataset.id);
   },
   async delreh(el) {
     if (!confirm('Supprimer cette répète, ses dispos et sa setlist ?')) return;
+    const r = await rehSnapshot(el.dataset.id);
     await q(db.from('rehearsals').delete().eq('id', el.dataset.id));
     go('#/repetes');
+    notify('reh_delete', 'Répète supprimée', `${state.me} a supprimé la répète du ${rehWhen(r)}`, '#/repetes');
   },
   async savefield(el) {
     const f = el.dataset.field;
-    await q(db.from('songs').update({ [f]: document.getElementById('ta-' + f).value }).eq('id', el.dataset.id));
+    const value = document.getElementById('ta-' + f).value;
+    await q(db.from('songs').update({ [f]: value }).eq('id', el.dataset.id));
     toast('Enregistré');
+    const song = document.getElementById('songTitle')?.textContent || '';
     route();
+    const what = { tabs: ['Tabs modifiées', 'les tabs'], lyrics: ['Paroles modifiées', 'les paroles'], notes: ['Notes modifiées', 'les notes'] }[f] || ['Morceau modifié', f];
+    notify('song_text', what[0], `${state.me} a modifié ${what[1]} de « ${song} »`, '#/morceau/' + el.dataset.id, `text:${el.dataset.id}:${f}`);
   },
   async rename(el) {
     const cur = document.getElementById('songTitle').textContent;
@@ -1415,6 +1766,7 @@ const actions = {
     if (!t || !t.trim() || t.trim() === cur) return;
     await q(db.from('songs').update({ title: t.trim() }).eq('id', el.dataset.id));
     route();
+    notify('song_text', 'Morceau renommé', `${state.me} a renommé « ${cur} » en « ${t.trim()} »`, '#/morceau/' + el.dataset.id, 'rename:' + el.dataset.id);
   },
   async uploadaudio(el) {
     const input = document.getElementById('audioFile');
@@ -1429,28 +1781,37 @@ const actions = {
     if (error) { el.textContent = 'Envoyer'; toast('Erreur : ' + error.message); return; }
     await q(db.from('song_audio').insert({ song_id: el.dataset.id, title, path, size: file.size, added_by: state.me }));
     toast('Enregistrement ajouté');
+    const song = document.getElementById('songTitle')?.textContent || '';
     route();
+    notify('audio', 'Nouvel enregistrement', `${state.me} a ajouté « ${title} » sur « ${song} »`, '#/morceau/' + el.dataset.id);
   },
   async delaudio(el) {
     if (!confirm('Supprimer cet enregistrement ?')) return;
+    const song = document.getElementById('songTitle')?.textContent || '';
+    const songId = (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1] || '';
     await db.storage.from(MEDIA).remove([el.dataset.path]);
     await q(db.from('song_audio').delete().eq('id', el.dataset.id));
     route();
+    notify('audio', 'Enregistrement supprimé', `${state.me} a supprimé un enregistrement de « ${song} »`, songId ? '#/morceau/' + songId : '#/morceaux');
   },
   async delcover(el) {
     if (!confirm('Retirer la pochette ?')) return;
     await db.storage.from(MEDIA).remove([el.dataset.path]);
     await q(db.from('songs').update({ cover_path: null }).eq('id', el.dataset.id));
+    const song = document.getElementById('songTitle')?.textContent || '';
     route();
+    notify('cover', 'Pochette', `${state.me} a retiré la pochette de « ${song} »`, '#/morceau/' + el.dataset.id, 'cover:' + el.dataset.id);
   },
   async delsong(el) {
     if (!confirm('Supprimer ce morceau ? Il sera aussi retiré des setlists, avec ses enregistrements et sa pochette.')) return;
+    const song = document.getElementById('songTitle')?.textContent || '';
     // Supprime d'abord les fichiers stockés (audio + pochette)
     const s = await q(db.from('songs').select('cover_path, song_audio(path)').eq('id', el.dataset.id).maybeSingle());
     const files = [s?.cover_path, ...((s?.song_audio || []).map(a => a.path))].filter(Boolean);
     if (files.length) await db.storage.from(MEDIA).remove(files);
     await q(db.from('songs').delete().eq('id', el.dataset.id));
     go('#/morceaux');
+    notify('song_delete', 'Morceau supprimé', `${state.me} a supprimé « ${song} »`, '#/morceaux');
   },
   async saveband() {
     const name = document.getElementById('bandInput').value.trim();
@@ -1458,14 +1819,17 @@ const actions = {
     await q(db.from('settings').upsert({ id: 1, band_name: name }));
     await loadBase();
     toast('Nom du groupe enregistré');
+    notify('group', 'Groupe', `${state.me} a renommé le groupe en « ${name} »`, '#/reglages', 'band');
   },
   async logout() {
     if (!confirm('Se déconnecter ? Il faudra retaper le mot de passe du groupe.')) return;
+    await Push.disable().catch(() => {}); // plus de notifications sur cet appareil
+    stopRealtime();
     await db.auth.signOut();
     state.authed = false;
     viewLogin();
   },
-  changeme() { setMe(null); document.getElementById('meLabel').textContent = ''; viewPicker(); },
+  changeme() { setMe(null); document.getElementById('meLabel').textContent = ''; updateBell(); viewPicker(); },
   async delmember(el) {
     const n = el.dataset.name;
     if (!confirm(`Retirer ${n} du groupe ?`)) return;
@@ -1473,8 +1837,16 @@ const actions = {
     if (n === state.me) setMe(null);
     await loadBase();
     route();
+    notify('group', 'Groupe', `${state.me || 'Quelqu\'un'} a retiré ${n} du groupe`, '#/reglages');
   },
 };
+
+// Notification groupée pour toutes les modifications de setlist
+async function notifySetlist(rid, what) {
+  if (!rid) return;
+  const r = await rehSnapshot(rid);
+  notify('setlist', 'Setlist modifiée', `${state.me} ${what} du ${rehWhen(r)}`, '#/repete/' + rid, 'setlist:' + rid);
+}
 
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-act]');
@@ -1483,7 +1855,8 @@ document.addEventListener('click', async e => {
   const fn = actions[el.dataset.act];
   if (!fn || el.disabled) return;
   el.disabled = true;
-  try { await fn(el); } catch (err) {} finally { if (el.isConnected) el.disabled = false; }
+  lastLocalAction = Date.now();
+  try { await fn(el); } catch (err) {} finally { if (el.isConnected) el.disabled = false; lastLocalAction = Date.now(); }
 });
 
 // ===== Formulaires =====
@@ -1493,6 +1866,7 @@ document.addEventListener('submit', async e => {
   e.preventDefault();
   const d = Object.fromEntries(new FormData(form));
   const btn = form.querySelector('[type=submit]'); if (btn) btn.disabled = true;
+  lastLocalAction = Date.now();
   try {
     if (form.dataset.form === 'login') {
       const { error } = await db.auth.signInWithPassword({ email: GROUP_EMAIL, password: d.password });
@@ -1520,29 +1894,60 @@ document.addEventListener('submit', async e => {
       toast(`${created.length} répète${created.length > 1 ? 's créées' : ' créée'}${songIds.length ? ` avec ${songIds.length} morceau${songIds.length > 1 ? 'x' : ''}` : ''}`);
       if (state.sheetFrom === 'calendar') afterSheet(null);
       else afterSheet(created.length === 1 ? '#/repete/' + created[0].id : '#/repetes');
+      const extra = `${d.time ? ' à ' + d.time : ''}${place ? ' · ' + place : ''}`;
+      if (dates.length === 1) {
+        notify('reh_new', 'Nouvelle répète', `${state.me} a ajouté une répète : ${rehWhen({ date: dates[0] })}${extra}`, '#/repete/' + created[0].id);
+      } else {
+        const sorted = [...dates].sort();
+        notify('reh_new', 'Nouvelles répètes', `${state.me} a ajouté ${dates.length} répètes, du ${rehWhen({ date: sorted[0] })} au ${rehWhen({ date: sorted[sorted.length - 1] })}${extra}`, '#/calendrier/' + sorted[0].slice(0, 7));
+      }
     } else if (form.dataset.form === 'editReh') {
+      const before = await rehSnapshot(form.dataset.id);
       await q(db.from('rehearsals').update({ date: d.date, time: d.time, place: d.place.trim() }).eq('id', form.dataset.id));
       route();
+      notify('reh_edit', 'Répète modifiée', `${state.me} a modifié la répète du ${rehWhen(before)} : ${rehWhen({ date: d.date })}${d.time ? ' à ' + d.time : ''}${d.place.trim() ? ' · ' + d.place.trim() : ''}`,
+        '#/repete/' + form.dataset.id, 'edit:' + form.dataset.id);
     } else if (form.dataset.form === 'newSong') {
       const title = (d.title || '').trim();
       if (!title) { toast('Donne un titre au morceau'); return; }
       const s = await q(db.from('songs').insert({ title }).select('id').single());
       afterSheet('#/morceau/' + s.id);
+      notify('song_new', 'Nouveau morceau', `${state.me} a ajouté « ${title} »`, '#/morceau/' + s.id);
     } else if (form.dataset.form === 'newMember') {
       const name = d.name.trim();
-      if (name) { await q(db.from('members').insert({ name })); await loadBase(); route(); }
+      if (name) {
+        await q(db.from('members').insert({ name })); await loadBase(); route();
+        notify('group', 'Groupe', `${state.me} a ajouté ${name} au groupe`, '#/reglages');
+      }
     }
-  } catch (err) {} finally { if (btn && btn.isConnected) btn.disabled = false; }
+  } catch (err) {} finally { if (btn && btn.isConnected) btn.disabled = false; lastLocalAction = Date.now(); }
 });
 
 // ===== Champs enregistrés automatiquement =====
 document.addEventListener('change', async e => {
   const el = e.target.closest('[data-change]');
   if (!el) return;
+  lastLocalAction = Date.now();
   try {
     if (el.dataset.change === 'itemnote') {
       await q(db.from('setlist_items').update({ note: el.value }).eq('id', el.dataset.id));
       toast('Note enregistrée');
+      const song = el.closest('.set-item')?.querySelector('.title')?.textContent || '';
+      const rid = currentRehId(), r = rid ? await rehSnapshot(rid) : null;
+      if (el.value.trim()) notify('setlist_note', 'Note de répète', `${state.me} sur « ${song} » (${rehWhen(r)}) : ${short(el.value, 80)}`, rid ? '#/repete/' + rid : '', 'itemnote:' + el.dataset.id);
+    } else if (el.dataset.change === 'ntype') {
+      const t = el.value, set = new Set(state.prefs.disabled_types);
+      if (el.checked) set.delete(t); else set.add(t);
+      state.prefs.disabled_types = [...set];
+      await savePrefs();
+    } else if (el.dataset.change === 'remday' || el.dataset.change === 'remtime') {
+      const k = el.dataset.kind, i = Number(el.dataset.i);
+      const slots = [...(state.prefs[k] || [])];
+      if (!slots[i]) return;
+      slots[i] = { ...slots[i], [el.dataset.change === 'remday' ? 'days' : 'time']: el.dataset.change === 'remday' ? Number(el.value) : (el.value || '18:00') };
+      state.prefs[k] = slots;
+      await savePrefs();
+      toast('Rappel enregistré');
     } else if (el.dataset.change === 'audiofile') {
       const file = el.files?.[0];
       const pick = document.getElementById('audioPick');
@@ -1574,14 +1979,18 @@ document.addEventListener('change', async e => {
       if (el.dataset.old) await db.storage.from(MEDIA).remove([el.dataset.old]);
       await q(db.from('songs').update({ cover_path: path }).eq('id', el.dataset.id));
       toast('Pochette enregistrée');
+      const song = document.getElementById('songTitle')?.textContent || '';
       route();
+      notify('cover', 'Pochette', `${state.me} a ${el.dataset.old ? 'changé' : 'ajouté'} la pochette de « ${song} »`, '#/morceau/' + el.dataset.id, 'cover:' + el.dataset.id);
     } else if (el.dataset.change === 'mynote') {
       await q(db.from('song_progress').upsert(
         { song_id: el.dataset.id, member: state.me, note: el.value, updated_at: new Date().toISOString() },
         { onConflict: 'song_id,member' }));
       toast('Note enregistrée');
+      const song = document.getElementById('songTitle')?.textContent || '';
+      if (el.value.trim()) notify('perso_note', 'Note perso', `${state.me} sur « ${song} » : ${short(el.value, 80)}`, '#/morceau/' + el.dataset.id, 'perso:' + el.dataset.id);
     }
-  } catch (err) {}
+  } catch (err) {} finally { lastLocalAction = Date.now(); }
 });
 
 // ===== Aperçu de la série de répètes =====
@@ -1606,11 +2015,20 @@ document.addEventListener('input', e => {
 // ===== Démarrage =====
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // Appui sur une notification alors que l'app est déjà ouverte
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type !== 'open') return;
+    if (e.data.nid) markRead(e.data.nid);
+    go(e.data.link || '#/notifications');
+  });
 }
 window.addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => {
   // Rafraîchit les données quand on revient sur l'app, sauf si un champ est en cours d'édition
-  if (state.authed && document.visibilityState === 'visible' && !document.querySelector('textarea:focus, input:focus')) loadBase().then(route).catch(() => {});
+  if (state.authed && document.visibilityState === 'visible') {
+    updateBell();
+    if (!busyEditing()) loadBase().then(route).catch(() => {});
+  }
 });
 // Si la session expire ou est fermée, retour à l'écran de connexion
 db.auth.onAuthStateChange(event => {

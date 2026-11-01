@@ -3,8 +3,8 @@
 // - Garde une copie de l'app pour l'ouvrir même avec un réseau faible
 // - Les données (Supabase) ne sont jamais mises en cache : toujours en direct
 
-const CACHE = 'repetes-v17';
-const FILES = ['./', './index.html', './installer.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+const CACHE = 'repetes-v18';
+const FILES = ['./', './index.html', './installer.html', './manifest.json', './icon-192.png', './icon-512.png', './apple-touch-icon.png', './badge-96.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -33,4 +33,36 @@ self.addEventListener('fetch', event => {
       })
       .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
   );
+});
+
+// Notification reçue (même app fermée)
+self.addEventListener('push', event => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch (e) { d = { body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(d.title || 'Répètes', {
+    body: d.body || '',
+    icon: 'icon-192.png',
+    badge: 'badge-96.png',
+    tag: d.tag || undefined,
+    renotify: !!d.tag,
+    data: { link: d.link || '', nid: d.nid || '' },
+  }));
+});
+
+// Appui sur une notification : ouvre l'app sur la bonne page
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const { link, nid } = event.notification.data || {};
+  const url = new URL('./' + (nid ? '?nid=' + encodeURIComponent(nid) : '') + (link || '#/notifications'), self.registration.scope).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of wins) {
+      if (w.url.startsWith(self.registration.scope)) {
+        await w.focus();
+        w.postMessage({ type: 'open', link, nid });
+        return;
+      }
+    }
+    await self.clients.openWindow(url);
+  })());
 });
