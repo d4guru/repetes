@@ -294,6 +294,25 @@ pre.doc-text{margin:0;border:0;background:transparent;padding:10px 12px;white-sp
 .mark-row{padding:4px 0;border-bottom:1px solid var(--border)}
 .mark-row:last-of-type{border-bottom:0}
 .mark-go{border:0;min-height:38px;padding:4px 0;font-variant-numeric:tabular-nums;text-align:left}
+.mk{position:fixed;inset:0;z-index:36;display:flex;flex-direction:column;background:#0c0c0e}
+.mk-top{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:calc(env(safe-area-inset-top) + 10px) 14px 6px}
+.mk-title{font-weight:750;font-size:18px}
+.mk-doc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-hint{flex:none;padding:0 14px 8px;font-size:13px;color:var(--maybe)}
+.mk-box{flex:1;position:relative;overflow:auto;padding:8px 8px 8px 44px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.mk-mark{position:absolute;left:0;right:0;height:0;border-top:2px dashed var(--accent);z-index:2;display:flex;align-items:center;gap:6px;pointer-events:none}
+.mk-tag{pointer-events:auto;cursor:pointer;transform:translateY(-50%);margin-left:2px;padding:2px 5px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+.mk-mark.sel .mk-tag{box-shadow:0 0 0 3px rgba(232,100,58,.4)}
+.mk-act{pointer-events:auto;transform:translateY(-50%);min-height:30px;padding:2px 10px;font-size:13px;background:#26262d;border-color:var(--accent)}
+.mk-flash{position:absolute;left:0;right:0;height:0;border-top:3px solid #fff;z-index:3;pointer-events:none;animation:mkFlash .6s ease-out forwards}
+@keyframes mkFlash{from{opacity:1}to{opacity:0}}
+.mk-bar{flex:none;padding:10px 14px calc(12px + env(safe-area-inset-bottom));background:#16161a}
+.mk-time{font-variant-numeric:tabular-nums}
+.mk-ctrl{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mk-undo{flex:1;min-height:44px}
+.mk-skip{width:56px!important;height:48px!important;border-radius:12px!important;font-size:14px;font-weight:700;color:var(--text)}
+.mk-play{width:60px!important;height:60px!important}
+.mk-play svg{width:28px!important;height:28px!important}
 pre.mono.np-pre{font-size:13px}
 .audio-item.on{border-color:var(--accent)}
 .audio-play{flex:none;width:44px;height:44px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
@@ -426,6 +445,29 @@ body{overflow-x:clip}
       <button class="btn-sm np-zoombtn" data-dv="zoom-" aria-label="Réduire">−</button>
       <button class="btn-sm" data-dv="fit" id="dvZoom">100 %</button>
       <button class="btn-sm np-zoombtn" data-dv="zoom+" aria-label="Agrandir">+</button>
+    </div>
+  </div>
+</div>
+<div id="mk" class="mk hidden" role="dialog" aria-label="Placer des repères">
+  <div class="mk-top">
+    <div style="min-width:0">
+      <div class="mk-title">Placer des repères</div>
+      <div class="muted small mk-doc" id="mkDoc"></div>
+    </div>
+    <button class="btn-accent btn-sm" data-mk="done">Terminé</button>
+  </div>
+  <div class="mk-hint">Pendant la lecture, touche la tab à l'endroit que tu entends. Glisse pour faire défiler.</div>
+  <div class="mk-box" id="mkBox"></div>
+  <div class="mk-bar">
+    <div class="row between" style="margin-bottom:8px">
+      <span class="muted small mk-time" id="mkTime">0:00 / 0:00</span>
+      <span class="muted small" id="mkCount"></span>
+    </div>
+    <div class="mk-ctrl">
+      <button class="btn-sm mk-undo" data-mk="undo" id="mkUndo">Annuler le dernier</button>
+      <button class="pl-btn mk-skip" data-mk="back" aria-label="Reculer de 5 secondes">−5 s</button>
+      <button class="pl-btn pl-main mk-play" data-mk="play" id="mkPlay" aria-label="Lecture"><svg viewBox="0 0 24 24" id="mkPlayIco"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="pl-btn mk-skip" data-mk="fwd" aria-label="Avancer de 5 secondes">+5 s</button>
     </div>
   </div>
 </div>
@@ -823,6 +865,26 @@ function fabHtml(act, label) {
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`;
 }
 
+// ===== Fenêtres superposées et bouton retour =====
+// Chaque fenêtre ouverte ajoute une étape dans l'historique ; le bouton retour ne ferme que celle du dessus.
+const Layers = {
+  stack: [], ignore: 0,
+  push(name) { this.stack.push(name); history.pushState({ layer: name }, ''); },
+  // Appelé par chaque fenêtre quand elle se ferme
+  closed(name, fromHistory) {
+    const i = this.stack.lastIndexOf(name);
+    if (i >= 0) this.stack.splice(i, 1);
+    if (!fromHistory) { this.ignore++; history.back(); } // retour silencieux pour retirer son étape
+  },
+};
+window.addEventListener('popstate', () => {
+  if (Layers.ignore > 0) { Layers.ignore--; return; }
+  const top = Layers.stack[Layers.stack.length - 1];
+  const obj = { sheet: Sheet, np: Np, dv: Dv, mk: Mk }[top];
+  if (obj && obj.isOpen) obj.close(true);
+  else if (top) Layers.stack.pop();
+});
+
 // ===== Fenêtre qui monte du bas (popup) =====
 const Sheet = {
   open(formName, bodyHtml, footHtml) {
@@ -834,7 +896,7 @@ const Sheet = {
     document.getElementById('sheet').classList.remove('hidden');
     document.body.classList.add('sheet-open');
     document.getElementById('sheetBody').scrollTop = 0;
-    if (!this.isOpen) { history.pushState({ sheet: 1 }, ''); this.isOpen = true; }
+    if (!this.isOpen) { Layers.push('sheet'); this.isOpen = true; }
   },
   // fromHistory : fermeture déclenchée par le bouton retour du téléphone
   close(fromHistory) {
@@ -843,10 +905,10 @@ const Sheet = {
     document.getElementById('sheet').classList.add('hidden');
     document.body.classList.remove('sheet-open');
     document.getElementById('sheetBody').innerHTML = '';
-    if (!fromHistory) history.back();
+    Layers.closed('sheet', fromHistory);
   },
 };
-window.addEventListener('popstate', () => { if (Sheet.isOpen) Sheet.close(true); });
+
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && Sheet.isOpen) Sheet.close(); });
 // Après une création : fermer la fenêtre puis aller à la bonne page
 function afterSheet(hash) {
@@ -1568,9 +1630,11 @@ const Player = {
       : '<rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/>';
     this.el('plPlayIco').innerHTML = ico;
     this.el('npPlayIco').innerHTML = ico;
+    this.el('mkPlayIco').innerHTML = ico;
     const label = this.audio.paused ? 'Lecture' : 'Pause';
     this.el('plPlay').setAttribute('aria-label', label);
     this.el('npPlay').setAttribute('aria-label', label);
+    this.el('mkPlay').setAttribute('aria-label', label);
   },
 };
 (() => {
@@ -1712,7 +1776,7 @@ const Dv = {
     this.el('dvDownload').href = doc.url;
     this.el('dv').classList.remove('hidden');
     document.body.classList.add('np-open');
-    history.pushState({ dv: 1 }, '');
+    Layers.push('dv');
     this.render();
   },
   close(fromHistory) {
@@ -1721,7 +1785,7 @@ const Dv = {
     this.el('dv').classList.add('hidden');
     if (!Np.isOpen) document.body.classList.remove('np-open');
     this.el('dvBox').innerHTML = '';
-    if (!fromHistory) history.back();
+    Layers.closed('dv', fromHistory);
   },
   async render() {
     const box = this.el('dvBox'), p = box.scrollHeight ? box.scrollTop / box.scrollHeight : 0;
@@ -1753,7 +1817,6 @@ const Dv = {
     else if (v === 'fit') Dv.setZoom(1);
   });
   Dv.el('dvBox').addEventListener('scroll', () => Dv.updatePage(), { passive: true });
-  window.addEventListener('popstate', () => { if (Dv.isOpen) Dv.close(true); });
 })();
 
 // ----- Envoi d'une tablature (PDF ou photo) -----
@@ -1774,6 +1837,114 @@ function openUploadFileSheet(file, songId) {
   setTimeout(() => { const i = document.querySelector('#sheetBody input[name=title]'); if (i) { i.focus(); i.select(); } }, 250);
 }
 
+// ===== Mode « Placer des repères » =====
+// La tab en plein écran, les commandes en bas, et un toucher sur la tab place un repère à cet endroit.
+const REACTION = 0.2; // on touche toujours un peu après avoir entendu : le repère est avancé d'autant
+const Mk = {
+  isOpen: false, placed: [], sel: null, down: null,
+  el: id => document.getElementById(id),
+  async open() {
+    const doc = Np.doc(), t = Np.track();
+    if (!doc || !t || !t.audioId) return;
+    this.isOpen = true; this.placed = []; this.sel = null;
+    this.el('mkDoc').textContent = doc.title;
+    this.el('mk').classList.remove('hidden');
+    Layers.push('mk');
+    const box = this.el('mkBox');
+    const npBox = Np.el('npDoc'), p = npBox ? docPos(npBox) : 0;
+    await renderDoc(box, doc, Np.docZoom);
+    setDocPos(box, p);
+    this.renderMarks(); this.progress();
+  },
+  close(fromHistory) {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    this.el('mk').classList.add('hidden');
+    this.el('mkBox').innerHTML = '';
+    Layers.closed('mk', fromHistory);
+    Np.renderMarkers();
+    Np.resumeFollow(); // la tab reprend son défilement, déjà synchronisée
+  },
+  // Marques des repères dans la marge gauche
+  renderMarks() {
+    const box = this.el('mkBox');
+    box.querySelectorAll('.mk-mark').forEach(m => m.remove());
+    const H = box.scrollHeight;
+    Np.markers().forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'mk-mark' + (this.sel === m.id ? ' sel' : '');
+      div.style.top = (m.pos * H) + 'px';
+      div.dataset.id = m.id;
+      div.innerHTML = `<span class="mk-tag">${Player.fmt(m.t)}</span>
+        ${this.sel === m.id ? `<button class="btn-sm mk-act" data-mk="go" data-id="${m.id}">Aller</button>
+        <button class="btn-sm mk-act" data-mk="del" data-id="${m.id}" aria-label="Supprimer">✕</button>` : ''}`;
+      box.appendChild(div);
+    });
+    const n = Np.markers().length;
+    this.el('mkCount').textContent = `${n} repère${n > 1 ? 's' : ''}`;
+    this.el('mkUndo').disabled = !this.placed.length;
+  },
+  progress() {
+    if (!this.isOpen) return;
+    const a = Player.audio;
+    this.el('mkTime').textContent = `${Player.fmt(a.currentTime)} / ${Player.fmt(a.duration)}`;
+  },
+  async tapAt(clientY) {
+    const box = this.el('mkBox'), a = Player.audio;
+    const y = clientY - box.getBoundingClientRect().top - box.clientTop + box.scrollTop;
+    const pos = y / box.scrollHeight;
+    // Pendant la lecture, on compense le temps de réaction ; à l'arrêt, l'instant est celui affiché
+    const ct = a.paused ? a.currentTime : Math.max(0, a.currentTime - REACTION * (a.playbackRate || 1));
+    const row = await Np.addMarker(ct, pos);
+    if (!row) return;
+    this.placed.push(row.id);
+    this.sel = null;
+    this.renderMarks();
+    // Petit éclair visuel à l'endroit touché
+    const f = document.createElement('div');
+    f.className = 'mk-flash'; f.style.top = y + 'px';
+    box.appendChild(f); setTimeout(() => f.remove(), 600);
+    toast(`Repère à ${Player.fmt(ct)}`);
+  },
+  async undo() {
+    const id = this.placed.pop();
+    if (!id) return;
+    await Np.deleteMarkers([id]);
+    this.renderMarks();
+    toast('Dernier repère annulé');
+  },
+};
+(() => {
+  const mk = Mk.el('mk'), box = Mk.el('mkBox'), a = Player.audio;
+  mk.addEventListener('click', async e => {
+    const b = e.target.closest('[data-mk]');
+    if (!b || b.disabled) return;
+    const v = b.dataset.mk;
+    if (v === 'done') Mk.close();
+    else if (v === 'play') Player.toggle();
+    else if (v === 'back') a.currentTime = Math.max(0, a.currentTime - 5);
+    else if (v === 'fwd') a.currentTime = Math.min(a.duration || 0, a.currentTime + 5);
+    else if (v === 'undo') Mk.undo();
+    else if (v === 'go') { const m = Np.allMarkers.find(x => x.id === b.dataset.id); if (m) a.currentTime = m.t; Mk.sel = null; Mk.renderMarks(); }
+    else if (v === 'del') { Mk.placed = Mk.placed.filter(id => id !== b.dataset.id); await Np.deleteMarkers([b.dataset.id]); Mk.sel = null; Mk.renderMarks(); }
+  });
+  // Toucher bref sur la tab = repère ; glisser = défilement ; toucher une marque = la sélectionner
+  box.addEventListener('pointerdown', e => {
+    if (e.target.closest('.mk-act')) { Mk.down = null; return; }
+    Mk.down = { x: e.clientX, y: e.clientY, t: Date.now(), mark: e.target.closest('.mk-mark')?.dataset.id || null };
+  });
+  box.addEventListener('pointercancel', () => { Mk.down = null; });
+  box.addEventListener('pointerup', e => {
+    const d = Mk.down; Mk.down = null;
+    if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || Date.now() - d.t > 600) return;
+    if (d.mark) { Mk.sel = Mk.sel === d.mark ? null : d.mark; Mk.renderMarks(); return; }
+    if (Mk.sel) { Mk.sel = null; Mk.renderMarks(); return; } // un toucher ailleurs ferme la sélection
+    Mk.tapAt(e.clientY);
+  });
+  a.addEventListener('timeupdate', () => Mk.progress());
+  a.addEventListener('loadedmetadata', () => Mk.progress());
+})();
+
 // ===== Page « En lecture » : paroles, tempo, boucle A-B =====
 const Np = {
   isOpen: false, loop: { a: null, b: null }, rate: 1, tab: null, songs: {}, raf: 0, dragging: false,
@@ -1788,7 +1959,7 @@ const Np = {
     this.el('np').style.transform = '';
     document.body.classList.add('np-open');
     this.el('npBody').scrollTop = 0;
-    history.pushState({ np: 1 }, '');
+    Layers.push('np');
     this.render();
   },
   // fromHistory : fermeture par le bouton retour du téléphone
@@ -1797,7 +1968,7 @@ const Np = {
     this.isOpen = false;
     this.el('np').classList.add('hidden');
     document.body.classList.remove('np-open');
-    if (!fromHistory) history.back();
+    Layers.closed('np', fromHistory);
   },
   // Nouveau morceau : on repart à 100 % sans boucle
   onTrack() {
@@ -1876,7 +2047,7 @@ const Np = {
         <button class="doc-resume hidden" id="npResume" data-np="resume">Reprendre le suivi</button>
       </div>
       <div class="row" style="gap:8px;margin-top:10px">
-        <button class="btn-accent grow" data-np="mark" ${t && t.audioId ? '' : 'disabled'}>Placer un repère</button>
+        <button class="btn-accent grow" data-np="markmode" ${t && t.audioId ? '' : 'disabled'}>Placer des repères</button>
         <button class="btn-sm" data-np="marklist" id="npMarkBtn"></button>
       </div>
       <div id="npMarks" class="hidden"></div>
@@ -1899,7 +2070,7 @@ const Np = {
     btn.textContent = `Repères (${m.length})`;
     this.el('npSyncHint').textContent = m.length
       ? `La tablature suit la musique grâce à ${m.length} repère${m.length > 1 ? 's' : ''}. Tu peux en ajouter à tout moment.`
-      : "Sans repère, la tablature défile au prorata du morceau. Pour un suivi précis : quand la musique arrive à un passage, fais défiler la tab pour placer ce passage sur la ligne orange, puis touche « Placer un repère ».";
+      : "Sans repère, la tablature défile au prorata du morceau. Pour un suivi précis : touche « Placer des repères », lance la musique, et touche la tab à l'endroit que tu entends au début de chaque partie.";
     this.el('npMarks').innerHTML = m.length ? `
       <div class="card" style="margin-top:10px;padding:6px 14px">
         ${m.map(x => `<div class="mark-row row between">
@@ -1952,23 +2123,22 @@ const Np = {
     const top = p * box.scrollHeight - READ_LINE * box.clientHeight;
     if (force || Math.abs(box.scrollTop - top) > 0.5) box.scrollTop = top;
   },
-  async placeMarker() {
-    const t = this.track(), box = this.el('npDoc');
-    if (!t || !t.audioId || !box) return;
-    const ct = Player.audio.currentTime, pos = docPos(box);
+  // Ajoute un repère (à l'instant ct du morceau, à la position pos du document)
+  async addMarker(ct, pos) {
+    const t = this.track();
+    if (!t || !t.audioId) return null;
     // Un repère au même moment (à 0,3 s près) est remplacé
     const near = this.markers().filter(m => Math.abs(m.t - ct) < 0.3);
     if (near.length) {
       await q(db.from('tab_markers').delete().in('id', near.map(m => m.id)));
       this.allMarkers = this.allMarkers.filter(m => !near.includes(m));
     }
-    const row = { id: uuid(), audio_id: t.audioId, doc: this.docId, t: ct, pos, created_by: state.me };
+    const row = { id: uuid(), audio_id: t.audioId, doc: this.docId, t: ct, pos: Math.min(1, Math.max(0, pos)), created_by: state.me };
     await q(db.from('tab_markers').insert(row));
     this.allMarkers.push(row);
-    toast(`Repère placé à ${Player.fmt(ct)}`);
     this.renderMarkers();
-    this.resumeFollow();
     notify('song_text', 'Tablature synchronisée', `${state.me} a placé des repères de synchronisation sur « ${t.title} »`, '#/morceau/' + t.songId, 'markers:' + t.audioId);
+    return row;
   },
   async deleteMarkers(ids) {
     if (!ids.length) return;
@@ -2116,7 +2286,7 @@ const Np = {
     else if (v === 'dzoom-') Np.setDocZoom(Np.docZoom - 0.25);
     else if (v === 'dzoom+') Np.setDocZoom(Np.docZoom + 0.25);
     else if (v === 'resume') Np.resumeFollow();
-    else if (v === 'mark') Np.placeMarker();
+    else if (v === 'markmode') Mk.open();
     else if (v === 'marklist') Np.el('npMarks').classList.toggle('hidden');
     else if (v === 'markgo') {
       const m = Np.allMarkers.find(x => x.id === b.dataset.id);
@@ -2136,7 +2306,6 @@ const Np = {
   let rz;
   window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Np.isOpen && Np.tab === 'tabs' && Np.el('npDoc')) Np.setDocZoom(Np.docZoom); }, 300); });
   a.addEventListener('pause', () => clearTimeout(Np.loopTimer));
-  window.addEventListener('popstate', () => { if (Np.isOpen) Np.close(true); });
   // Glisser vers le bas depuis le haut de la page pour la fermer
   let g = null;
   np.addEventListener('touchstart', e => {
