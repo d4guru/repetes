@@ -451,6 +451,11 @@ body.look-compact .set-item textarea,body.look-compact .card textarea{background
 body.look-compact .split-list .card.sel{box-shadow:none;background:rgba(232,100,58,.09)}
 body.look-compact .frozen-banner{border-radius:0;border-left:0;border-right:0;background:transparent;padding:12px 4px}
 @media (hover: hover){ body.look-compact a.card:hover,body.look-compact .song-link:hover{background:rgba(255,255,255,.035)} }
+
+details.fold > summary.fold-sum{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:6px 0;color:inherit;font-weight:inherit;-webkit-tap-highlight-color:transparent}
+details.fold > summary.fold-sum::-webkit-details-marker{display:none}
+.fold-chev{width:18px;height:18px;flex:none;fill:none;stroke:var(--muted);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s}
+details.fold[open] .fold-chev{transform:rotate(180deg)}
 .w-only{display:none}
 .w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
@@ -742,7 +747,7 @@ body.look-compact .frozen-banner{border-radius:0;border-left:0;border-right:0;ba
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 38; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 39; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -1806,11 +1811,22 @@ const doneBadge = () => `<span class="chip done">${LOCK_ICO}Terminé</span>`;
 const fmtShort = ts => new Date(ts).toLocaleDateString('fr-CH', { day: 'numeric', month: 'short', year: 'numeric' });
 
 // ===== Détail d'un morceau =====
-function fieldBlock(song, field, label, cls, locked) {
+// Section repliable (fermée par défaut ; reste ouverte pendant la session si on l'a ouverte)
+const FOLD_CHEV = '<svg class="fold-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const foldOpen = key => state.folds && state.folds[key] ? 'open' : '';
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (d && d.matches && d.matches('details.fold[data-fold]')) (state.folds = state.folds || {})[d.dataset.fold] = d.open;
+}, true);
+function fieldBlock(song, field, label, cls, locked, fold) {
   const val = song[field] || '';
+  const editBtn = locked ? '' : `<button class="btn-sm" data-act="toggle" data-target="edit-${field}" data-hide="show-${field}">Modifier</button>`;
   return `
-    <div class="row between" style="margin-top:22px"><h3 style="margin:0">${label}</h3>
-      ${locked ? '' : `<button class="btn-sm" data-act="toggle" data-target="edit-${field}" data-hide="show-${field}">Modifier</button>`}</div>
+    ${fold ? `<details class="fold" data-fold="${field}" ${foldOpen(field)} style="margin-top:22px">
+      <summary class="fold-sum"><h3 style="margin:0">${label}</h3>${val ? '' : '<span class="muted small">· vide</span>'}<span class="grow"></span>${FOLD_CHEV}</summary>
+      ${editBtn ? `<div class="row" style="justify-content:flex-end;margin-top:8px">${editBtn}</div>` : ''}`
+    : `<div class="row between" style="margin-top:22px"><h3 style="margin:0">${label}</h3>
+      ${editBtn}</div>`}
     <div id="show-${field}" style="margin-top:10px">
       ${val ? `<pre class="${cls}">${esc(val)}</pre>` : `<div class="muted small">Rien pour l'instant.</div>`}
     </div>
@@ -1820,7 +1836,7 @@ function fieldBlock(song, field, label, cls, locked) {
         <button class="btn-ghost grow" data-act="toggle" data-target="edit-${field}" data-hide="show-${field}">Annuler</button>
         <button class="btn-accent grow" data-act="savefield" data-id="${song.id}" data-field="${field}">Enregistrer</button>
       </div>
-    </div>`;
+    </div>${fold ? '</details>' : ''}`;
 }
 // Construit le contenu d'une fiche de morceau (page actuelle et voisines du glisser)
 async function songHtml(id, hasPrev, hasNext) {
@@ -1952,17 +1968,19 @@ async function songHtml(id, hasPrev, hasNext) {
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
         Ajouter un PDF ou une photo</label>
     </div>
-    ${fieldBlock(song, 'lyrics', 'Paroles', 'lyrics', locked)}
+    ${fieldBlock(song, 'lyrics', 'Paroles', 'lyrics', locked, true)}
     ${fieldBlock(song, 'notes', 'Notes', 'lyrics', locked)}
 
-    <h3>Historique en répète (${history.length})</h3>
-    <div class="card">
+    <details class="fold" data-fold="history" ${foldOpen('history')} style="margin-top:26px">
+    <summary class="fold-sum"><h3 style="margin:0">Historique en répète (${history.length})</h3><span class="grow"></span>${FOLD_CHEV}</summary>
+    <div class="card" style="margin-top:10px">
       ${history.length ? history.map(h => `
         <a class="history-item" style="display:block" href="#/repete/${h.rehearsal_id}">
           <div class="cap small muted">${esc(fmtDate(h.rehearsals.date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}</div>
           <div>${h.note ? esc(h.note) : '<span class="muted small">Pas de note</span>'}</div>
         </a>`).join('') : `<div class="muted small">Ce morceau n'a encore été dans aucune setlist.</div>`}
     </div>
+    </details>
 
     ${locked ? `<p class="muted small" style="margin-top:24px;text-align:center">Rouvre le morceau pour le modifier ou le supprimer.</p>`
       : `<button class="btn-danger full" style="margin-top:24px" data-act="delsong" data-id="${song.id}">Supprimer ce morceau</button>`}
