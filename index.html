@@ -338,6 +338,85 @@ body{overflow-x:clip}
 .cal-in-next{animation:calFromRight .25s ease-out}
 .cal-in-prev{animation:calFromLeft .25s ease-out}
 @media (prefers-reduced-motion: reduce){.cal-in-next,.cal-in-prev{animation:none}}
+.w-only{display:none}
+.split-empty{color:var(--muted);text-align:center;padding:80px 20px}
+/* ===== Version ordinateur (grand écran) ===== */
+@media (min-width: 900px){
+  :root{--side:236px;--plh:84px}
+  html,body{font-size:15px}
+  .m-only{display:none}
+  .w-only{display:inline}
+  /* Menu à gauche : nom du groupe, membre, cloche puis les pages */
+  header.top{position:fixed;left:0;top:0;width:var(--side);height:118px;flex-direction:column;align-items:stretch;justify-content:center;gap:10px;
+    padding:18px 20px;background:var(--surface);backdrop-filter:none;border-bottom:0;border-right:1px solid var(--border);z-index:7}
+  header.top h1{font-size:19px}
+  header.top > .row{justify-content:space-between}
+  .bell{margin:0}
+  nav.bottom{top:118px;bottom:0;left:0;right:auto;width:var(--side);flex-direction:column;gap:2px;padding:6px 12px 16px;
+    border-top:0;border-right:1px solid var(--border);z-index:7}
+  nav.bottom a{flex:none;display:flex;align-items:center;gap:12px;text-align:left;padding:10px 12px;border-radius:10px;font-size:15px}
+  nav.bottom a .ico{margin:0;width:20px;height:20px}
+  nav.bottom a.on{background:rgba(232,100,58,.12)}
+  /* Écran de connexion : pas de menu */
+  body:has(#nav.hidden) header.top{position:sticky;width:auto;height:auto;flex-direction:row;align-items:center;border-right:0;border-bottom:1px solid var(--border)}
+  body:has(#nav.hidden) main{margin-left:auto}
+  main{margin-left:max(var(--side), calc(var(--side) + (100vw - var(--side) - 860px) / 2));max-width:860px;padding:32px 40px 120px}
+  main:has(> .split){margin-left:var(--side);max-width:1500px}
+  body.playing main{padding-bottom:calc(var(--plh) + 60px)}
+  h2{font-size:24px}
+  .card{padding:16px 18px}
+  button,.btn{font-size:15px}
+  input,select,textarea{font-size:15px}
+  .fab{right:40px;bottom:36px}
+  body.playing .fab{bottom:calc(var(--plh) + 24px)}
+  #toast{left:auto;right:40px;width:380px;bottom:36px}
+  body.playing #toast{bottom:calc(var(--plh) + 24px)}
+  /* Deux colonnes : liste à gauche (défile seule), détail à droite */
+  .split{display:grid;grid-template-columns:minmax(300px,390px) minmax(0,1fr);gap:40px;align-items:start}
+  .split[data-split=cal]{grid-template-columns:minmax(360px,470px) minmax(0,1fr)}
+  .split-list{position:sticky;z-index:4;top:24px;max-height:calc(100vh - 48px);overflow-y:auto;overflow-x:hidden;padding:2px 8px 24px 2px;overscroll-behavior:contain;scrollbar-width:thin}
+  body.playing .split-list{max-height:calc(100vh - 48px - var(--plh))}
+  .split-list .swipe-vp{margin:0;padding:0}
+  .split-main{min-width:0}
+  .split-main .back,.split-main .swipe-hint{display:none}
+  .split-list .card.sel{box-shadow:0 0 0 2px var(--accent);background:#222228}
+  .split-list .cal-cell.sel{box-shadow:0 0 0 2px #fff}
+  .split-list .banner{margin-bottom:12px}
+  .split-list h3{margin-top:22px}
+  /* Lecteur : barre pleine largeur en bas */
+  .player{left:var(--side);bottom:0;height:var(--plh);padding:10px 28px;gap:14px;border-top:1px solid var(--border)}
+  .pl-cover{width:58px;height:58px}
+  .pl-title{font-size:16px}
+  .pl-sub{font-size:13px}
+  /* Fenêtres : centrées au lieu de monter du bas */
+  .sheet{top:50%;bottom:auto;left:50%;right:auto;width:min(580px, calc(100vw - 48px));max-height:86vh;margin:0;transform:translate(-50%,-50%);
+    border-radius:16px;border-bottom:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.6);animation:dlgIn .18s ease-out}
+  .sheet-grab{display:none}
+  .sheet-body{padding:18px 22px 18px}
+  .sheet-foot{padding:14px 22px}
+  /* « En lecture » : commandes à gauche, paroles/tablature à droite */
+  .np-body{max-width:1500px;display:grid;grid-template-columns:400px minmax(0,1fr);gap:48px;align-items:start;padding:8px 40px 32px}
+  .np-left{position:sticky;top:0}
+  .np-cover{width:200px;margin:0 auto 12px}
+  .np-tabs{margin-top:4px}
+  .np-right .doc-box{height:calc(100vh - 250px)}
+  .np-right pre.np-pre{max-height:calc(100vh - 140px);overflow:auto}
+  /* Tablature plein écran, repères, visionneuse : page centrée, pas étirée sur tout l'écran */
+  .fs-wrap,.mk-box{width:min(100%, 1000px);align-self:center;border-left:1px solid var(--border);border-right:1px solid var(--border)}
+  .mk-bar > *,.mk-hint{width:100%;max-width:1000px;margin-left:auto;margin-right:auto}
+  .dv-box{padding:10px max(8px, calc((100% - 1000px) / 2))}
+}
+@media (min-width: 900px) and (hover: hover){
+  nav.bottom a:hover{background:var(--surface2);color:var(--text)}
+  nav.bottom a.on:hover{background:rgba(232,100,58,.18);color:var(--accent)}
+  a.card:hover,.card:has(> a:hover){border-color:#55555f}
+  .split-list .card.sel:hover{border-color:var(--border)}
+  button:hover:not(:disabled),.btn:hover,label.pick:hover{filter:brightness(1.15)}
+  .cal-cell.empty-day:hover{background:var(--surface2);color:var(--text)}
+  .cal-cell.has:hover{filter:brightness(1.25)}
+  .history-item:hover,.file-open:hover{color:var(--accent)}
+}
+@keyframes dlgIn{from{opacity:0;transform:translate(-50%,-48%) scale(.98)}to{opacity:1;transform:translate(-50%,-50%)}}
 </style>
 </head>
 <body>
@@ -387,6 +466,7 @@ body{overflow-x:clip}
     <span style="width:40px"></span>
   </div>
   <div class="np-body" id="npBody">
+   <div class="np-left">
     <div class="np-cover np-drag" id="npCover"></div>
     <div class="np-title" id="npTitle"></div>
     <div class="np-sub" id="npSub"></div>
@@ -432,13 +512,15 @@ body{overflow-x:clip}
       </div>
       <div class="muted small" id="npLoopHint" style="margin-top:8px"></div>
     </div>
-
+   </div>
+   <div class="np-right">
     <div class="seg np-tabs" id="npTabs">
       <button type="button" data-np="tab" data-v="lyrics">Paroles</button>
       <button type="button" data-np="tab" data-v="tabs">Tabs</button>
       <button type="button" data-np="tab" data-v="notes">Notes</button>
     </div>
     <div id="npText"></div>
+   </div>
   </div>
 </div>
 <div id="dv" class="dv hidden" role="dialog" aria-label="Tablature">
@@ -732,6 +814,7 @@ function dotsHtml(progress) {
 
 const state = { band: 'Mon groupe', members: [], me: null, authed: false, existingDates: new Set(), fileIndex: {} };
 const $app = document.getElementById('app');
+const APP = $app; // les pages peuvent aussi s'afficher dans une colonne (version ordinateur)
 
 // ===== Utilitaires =====
 function esc(s) {
@@ -783,8 +866,11 @@ async function route() {
   });
   document.getElementById('bell').classList.toggle('on', view === 'notifications');
   if (!state.me) return viewPicker();
+  state.detailReh = view === 'repete' ? id || null : null;
+  state.detailSong = view === 'morceau' ? id || null : null;
   try {
-    if (view === 'repete' && id) await viewRehearsal(id);
+    if (isWide() && ['repetes', 'repete', 'morceaux', 'morceau', 'calendrier'].includes(view)) await routeSplit(view, id, parts[2]);
+    else if (view === 'repete' && id) await viewRehearsal(id);
     else if (view === 'morceaux') await viewSongs();
     else if (view === 'morceau' && id) await viewSong(id);
     else if (view === 'reglages') await viewSettings();
@@ -795,6 +881,62 @@ async function route() {
   } catch (e) {
     $app.innerHTML = `<div class="empty">Impossible de charger les données.<br><br><button onclick="route()">Réessayer</button></div>`;
   }
+}
+
+// ===== Version ordinateur : liste à gauche, détail à droite =====
+const WIDE = matchMedia('(min-width: 900px)');
+const isWide = () => WIDE.matches;
+// En passant d'une largeur à l'autre (fenêtre redimensionnée), on redessine la page
+try { WIDE.addEventListener('change', () => { if (state.authed) route(); }); } catch (e) { WIDE.addListener(() => { if (state.authed) route(); }); }
+
+async function routeSplit(view, id, sub) {
+  const kind = view.startsWith('repete') ? 'reh' : view.startsWith('morceau') ? 'song' : 'cal';
+  let s = APP.querySelector(':scope > .split');
+  if (!s || s.dataset.split !== kind) {
+    APP.innerHTML = `<div class="split" data-split="${kind}"><section class="split-list"></section><section class="split-main"></section></div>`;
+    s = APP.firstElementChild;
+  }
+  const [L, R] = s.children;
+  let sel = null;
+  if (kind === 'reh') {
+    if (id) { sel = id; state.detailReh = sel; await Promise.all([viewRehearsals(L), viewRehearsal(sel, R)]); }
+    else {
+      await viewRehearsals(L);
+      sel = L.querySelector('.card a[href^="#/repete/"]')?.getAttribute('href').split('/')[2] || null;
+      state.detailReh = sel;
+      if (sel) await viewRehearsal(sel, R);
+      else R.innerHTML = `<div class="split-empty">Aucune répète.<br>Ajoute la prochaine avec le bouton +.</div>`;
+    }
+  } else if (kind === 'song') {
+    if (id) { sel = id; state.detailSong = sel; await Promise.all([viewSongs(L), viewSong(sel, R)]); }
+    else {
+      await viewSongs(L);
+      sel = L.querySelector('a.song-link')?.getAttribute('href').split('/')[2] || null;
+      state.detailSong = sel;
+      if (sel) await viewSong(sel, R);
+      else R.innerHTML = `<div class="split-empty">Aucun morceau pour l'instant.<br>Ajoute le premier avec le bouton +.</div>`;
+    }
+  } else {
+    const ym = /^\d{4}-\d{2}$/.test(id || '') ? id : todayISO().slice(0, 7);
+    await viewCalendar(ym, L);
+    // Dans le calendrier, choisir une répète l'affiche à droite sans quitter le calendrier
+    L.querySelectorAll('a[href^="#/repete/"]').forEach(a => a.setAttribute('href', `#/calendrier/${ym}/${a.getAttribute('href').split('/')[2]}`));
+    if (sub) sel = sub;
+    else {
+      const cards = [...L.querySelectorAll('a.card[data-rid]')];
+      sel = (cards.find(a => a.dataset.date >= todayISO()) || cards[0])?.dataset.rid || null;
+    }
+    state.detailReh = sel;
+    if (sel) {
+      await viewRehearsal(sel, R);
+      // Pas de glisser vers les répètes voisines ici : on choisit dans le calendrier
+      const vp = R.querySelector('.swipe-vp');
+      if (vp) { vp.dataset.prev = ''; vp.dataset.next = ''; vp.querySelectorAll('.pane-side').forEach(p => p.remove()); }
+    } else R.innerHTML = `<div class="split-empty">Aucune répète ce mois-ci.<br>Clique sur un jour libre pour en créer une.</div>`;
+  }
+  // Élément choisi mis en évidence dans la liste
+  if (sel) L.querySelectorAll(`a[href$="/${sel}"]`).forEach(a => (a.closest('.card') || (a.classList.contains('cal-cell') ? a : null))?.classList.add('sel'));
+  if (state.splitKey !== kind + sel) { if (state.splitKey) window.scrollTo(0, 0); state.splitKey = kind + sel; }
 }
 
 // ===== Connexion (mot de passe du groupe) =====
@@ -879,7 +1021,7 @@ function rehCard(r) {
     ${voteButtons(r.id, mine?.status)}
   </div>`;
 }
-async function viewRehearsals() {
+async function viewRehearsals($app = APP) {
   const reh = await q(db.from('rehearsals').select('*, availability(member,status), rehearsal_votes(member,vote)')
     .order('date', { ascending: true }).order('time', { ascending: true }));
   const today = todayISO();
@@ -1106,7 +1248,7 @@ function monthPane(ym, byDate, today, isCurrent) {
     <div class="cal-grid ${isCurrent && state.calDir ? 'cal-in-' + state.calDir : ''}">${cells}</div>`;
 }
 
-async function viewCalendar(ym) {
+async function viewCalendar(ym, $app = APP) {
   const today = todayISO();
   if (!/^\d{4}-\d{2}$/.test(ym || '')) ym = today.slice(0, 7);
   const [y, m] = ym.split('-').map(Number);
@@ -1127,13 +1269,13 @@ async function viewCalendar(ym) {
   $app.innerHTML = `
     ${nextBannerHtml(upcoming)}
     ${swipeFrame('cal', prev, next, monthPane(prev, byDate, today), monthPane(ym, byDate, today, true), monthPane(next, byDate, today))}
-    <p class="muted small" style="text-align:center;margin:8px 0 0">Glisse pour changer de mois · touche un jour libre pour créer une répète</p>
+    <p class="muted small" style="text-align:center;margin:8px 0 0"><span class="m-only">Glisse pour changer de mois · touche un jour libre pour créer une répète</span><span class="w-only">Glisse à deux doigts sur le pavé tactile (ou Maj + molette) pour changer de mois · clique sur un jour libre pour créer une répète</span></p>
     <div class="legend">${legend.map(([l, c, strike]) => `<span class="chip" style="background:${c}2e;color:${c}${strike ? ';text-decoration:line-through' : ''}">${l}</span>`).join('')}</div>
 
     <h3>Répètes du mois (${reh.length})</h3>
     ${reh.length ? reh.map(r => {
       const c = rehColor(r);
-      return `<a class="card ${rehState(r).s === 'annulee' ? 'cancelled' : ''}" style="display:block;border-left:5px solid ${c};padding:10px 14px" href="#/repete/${r.id}">
+      return `<a class="card ${rehState(r).s === 'annulee' ? 'cancelled' : ''}" style="display:block;border-left:5px solid ${c};padding:10px 14px" href="#/repete/${r.id}" data-rid="${r.id}" data-date="${r.date}">
         <div class="row between"><span class="cap strike"><strong>${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long' }))}</strong></span>
         <span class="muted small">${esc(r.time || '')}</span></div>
         ${stateHtml(r)}
@@ -1234,9 +1376,48 @@ function endSwipe() {
     // La page voisine est maintenant affichée : on remonte en haut (sans saut visible) et on charge la vraie page
     if (g.shift) { g.vp.querySelectorAll('.pane-side').forEach(p => { p.style.transform = ''; }); window.scrollTo(0, 0); }
     state.calDir = null;
-    go({ cal: '#/calendrier/', reh: '#/repete/', song: '#/morceau/' }[g.vp.dataset.kind] + target);
+    go(swipeHash(g.vp, target));
   }, 290);
 }
+function swipeHash(vp, target) { return { cal: '#/calendrier/', reh: '#/repete/', song: '#/morceau/' }[vp.dataset.kind] + target; }
+
+// Pavé tactile (glisser à deux doigts) ou Maj + molette : même effet que le glisser au doigt
+function swipeTo(vp, dir) {
+  const target = vp.dataset[dir], track = vp.querySelector('.swipe-track');
+  if (!target || !track || vp.dataset.busy) return;
+  const w = vp.querySelector('.pane-cur').offsetWidth + SWIPE_GAP;
+  const headerH = isWide() ? 0 : (document.querySelector('header.top')?.offsetHeight || 0);
+  const shift = Math.max(0, headerH - vp.getBoundingClientRect().top + 8);
+  vp.querySelectorAll('.pane-side').forEach(p => { p.style.transform = `translateY(${shift}px)`; });
+  vp.dataset.busy = '1';
+  track.style.transition = 'transform .28s cubic-bezier(.2,.8,.2,1)';
+  track.style.transform = `translate3d(${dir === 'next' ? -w : w}px,0,0)`;
+  setTimeout(() => {
+    if (shift) { vp.querySelectorAll('.pane-side').forEach(p => { p.style.transform = ''; }); window.scrollTo(0, 0); }
+    state.calDir = null;
+    go(swipeHash(vp, target));
+  }, 290);
+}
+const Wheel = { acc: 0, t: 0, locked: false };
+document.addEventListener('wheel', e => {
+  const vp = e.target.closest('.swipe-vp');
+  if (!vp) return;
+  let dx = e.deltaX;
+  if (!dx && e.shiftKey) dx = e.deltaY;
+  if (!dx || Math.abs(dx) < Math.abs(e.deltaY) && !e.shiftKey) return; // geste vertical : défilement normal
+  if (e.target.closest('pre.mono, input, textarea, select')) return; // contenu qui défile lui-même de côté
+  e.preventDefault(); // évite aussi le « page précédente » du navigateur
+  const now = performance.now();
+  if (now - Wheel.t > 220) { Wheel.acc = 0; Wheel.locked = false; }
+  Wheel.t = now;
+  if (Wheel.locked) return; // fin d'élan du pavé tactile après un changement de page
+  Wheel.acc += dx;
+  if (Math.abs(Wheel.acc) > 90) {
+    const dir = Wheel.acc > 0 ? 'next' : 'prev';
+    Wheel.acc = 0; Wheel.locked = true;
+    swipeTo(vp, dir);
+  }
+}, { passive: false });
 document.addEventListener('touchend', endSwipe, { passive: true });
 document.addEventListener('touchcancel', endSwipe, { passive: true });
 // Un glisser ne doit jamais être pris pour un appui sur un lien ou un jour du calendrier
@@ -1263,7 +1444,7 @@ async function rehearsalHtml(r, songs, allReh) {
   const html = `
     <a class="back" href="#/repetes">‹ Répètes</a>
     <h2 class="cap" style="margin-bottom:2px;${rehState(r).s === 'annulee' ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</h2>
-    <p class="muted small" style="margin:0 0 12px">
+    <p class="muted small swipe-hint" style="margin:0 0 12px">
       <span style="opacity:${hasPrev ? 1 : .25}">‹</span> glisse pour changer de répète <span style="opacity:${hasNext ? 1 : .25}">›</span>
     </p>
     <div class="row between wrap">
@@ -1331,7 +1512,7 @@ async function rehearsalHtml(r, songs, allReh) {
   return { html, available };
 }
 
-async function viewRehearsal(id) {
+async function viewRehearsal(id, $app = APP) {
   const [songs, allReh] = await Promise.all([
     q(db.from('songs').select('id,title').order('title')),
     q(db.from('rehearsals').select('id,date,time').order('date').order('time').order('created_at')),
@@ -1389,7 +1570,7 @@ function initSetlistSort() {
 }
 
 // ===== Liste des morceaux =====
-async function viewSongs() {
+async function viewSongs($app = APP) {
   const songs = await q(db.from('songs').select('id,title,cover_path,song_progress(member,level)').order('title'));
   const urlOf = await signedUrls(songs.map(s => s.cover_path));
   songs.forEach(s => { s.status = songStatus(s.song_progress); });
@@ -1457,7 +1638,7 @@ async function songHtml(id, hasPrev, hasNext) {
       <button class="btn-sm btn-icon btn-ghost" data-act="rename" data-id="${song.id}" aria-label="Renommer le morceau">
         <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
     </div>
-    <p class="muted small" style="margin:-8px 0 14px">
+    <p class="muted small swipe-hint" style="margin:-8px 0 14px">
       <span style="opacity:${hasPrev ? 1 : .25}">‹</span> glisse pour changer de morceau <span style="opacity:${hasNext ? 1 : .25}">›</span>
     </p>
 
@@ -1568,7 +1749,7 @@ async function songHtml(id, hasPrev, hasNext) {
 }
 
 // Ordre de navigation = ordre de l'onglet Morceaux (En cours, À apprendre, Prêt, puis titre)
-async function viewSong(id) {
+async function viewSong(id, $app = APP) {
   const list = await q(db.from('songs').select('id,title,song_progress(member,level)').order('title'));
   const ordered = ['en-cours', 'a-apprendre', 'pret'].flatMap(g => list.filter(s => songStatus(s.song_progress) === g));
   const idx = ordered.findIndex(s => s.id === id);
@@ -2566,7 +2747,9 @@ function notifyStatusChange(before, after) {
   else if (a === 'annulee') notify('reh_status', 'Répète annulée', `La répète du ${when} est annulée (absent${st.absents.length > 1 ? 's' : ''} : ${abs}).`, link, 'status:' + after.id);
   else if (b === 'annulee') notify('reh_status', 'Répète rétablie', `La répète du ${when} n'est plus annulée.`, link, 'status:' + after.id);
 }
-const currentRehId = () => (location.hash.match(/^#\/repete\/([^/]+)/) || [])[1];
+// Répète / morceau affiché en détail (dans l'adresse sur téléphone, dans la colonne de droite sur ordinateur)
+const currentRehId = () => state.detailReh || (location.hash.match(/^#\/repete\/([^/]+)/) || [])[1];
+const currentSongId = () => state.detailSong || (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1];
 
 // ----- Cloche et compteur -----
 async function updateBell() {
@@ -2968,7 +3151,7 @@ const actions = {
   async delfile(el) {
     if (!confirm(`Supprimer la tablature « ${el.dataset.title} » ? Ses repères de synchronisation seront aussi effacés.`)) return;
     const song = document.getElementById('songTitle')?.textContent || '';
-    const songId = (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1] || '';
+    const songId = currentSongId() || '';
     await db.storage.from(MEDIA).remove([el.dataset.path]);
     await q(db.from('tab_markers').delete().eq('doc', el.dataset.id));
     await q(db.from('song_files').delete().eq('id', el.dataset.id));
@@ -2996,7 +3179,7 @@ const actions = {
   async delaudio(el) {
     if (!confirm('Supprimer cet enregistrement ?')) return;
     const song = document.getElementById('songTitle')?.textContent || '';
-    const songId = (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1] || '';
+    const songId = currentSongId() || '';
     await db.storage.from(MEDIA).remove([el.dataset.path]);
     await q(db.from('song_audio').delete().eq('id', el.dataset.id));
     route();
@@ -3152,7 +3335,7 @@ document.addEventListener('submit', async e => {
       if (state.fileIndex[d.id]) state.fileIndex[d.id].title = title;
       toast('Tablature renommée');
       const song = document.getElementById('songTitle')?.textContent || '';
-      const songId = (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1] || '';
+      const songId = currentSongId() || '';
       afterSheet(null);
       notify('song_text', 'Tablature renommée', `${state.me} a renommé une tablature de « ${song} » : « ${title} »`, songId ? '#/morceau/' + songId : '#/morceaux', 'renamefile:' + d.id);
     } else if (form.dataset.form === 'renameSong' || form.dataset.form === 'renameAudio') {
@@ -3160,7 +3343,7 @@ document.addEventListener('submit', async e => {
       if (!title) { toast('Le titre ne peut pas être vide'); return; }
       if (title === d.old) { Sheet.close(); return; }
       const isSong = form.dataset.form === 'renameSong';
-      const songId = isSong ? d.id : (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1];
+      const songId = isSong ? d.id : currentSongId();
       const song = document.getElementById('songTitle')?.textContent || '';
       await q(db.from(isSong ? 'songs' : 'song_audio').update({ title }).eq('id', d.id));
       // Le lecteur affiche tout de suite le nouveau titre
