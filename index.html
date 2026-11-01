@@ -1306,9 +1306,10 @@ async function viewSong(id) {
     url: urlOf(a.path), cover: coverUrl, bpm: song.bpm }));
   $app.innerHTML = `
     <a class="back" href="#/morceaux">‹ Morceaux</a>
-    <div class="row between" style="align-items:flex-start">
-      <h2 class="grow" id="songTitle">${esc(song.title)}</h2>
-      <button class="btn-sm" data-act="rename" data-id="${song.id}">Renommer</button>
+    <div class="row between" style="align-items:center;margin:4px 0 14px">
+      <h2 class="grow" id="songTitle" style="margin:0">${esc(song.title)}</h2>
+      <button class="btn-sm btn-icon btn-ghost" data-act="rename" data-id="${song.id}" aria-label="Renommer le morceau">
+        <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
     </div>
 
     <input type="file" accept="image/*" id="coverInput" class="file-hidden" data-change="cover" data-id="${song.id}" data-old="${esc(song.cover_path || '')}">
