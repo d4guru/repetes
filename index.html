@@ -369,6 +369,43 @@ body{overflow-x:clip}
 @keyframes eqb{0%,100%{height:4px}50%{height:14px}}
 body.is-paused .eq i{animation-play-state:paused}
 .pl-open svg{fill:none!important;stroke-width:2.2!important;width:22px!important;height:22px!important}
+
+.np-cmmarks{position:absolute;left:0;right:0;top:0;height:28px;pointer-events:none;z-index:1}
+.np-cmmarks i{position:absolute;top:17px;width:2px;height:9px;margin-left:-1px;border-radius:1px;background:#4c9aff}
+.lrow-cm{flex:none;font-size:12px;color:var(--muted);white-space:nowrap}
+.cm-list{max-height:58vh;max-height:58dvh;overflow-y:auto;padding:4px 2px 8px;overscroll-behavior:contain}
+.cm-empty{color:var(--muted);text-align:center;font-size:14px;padding:28px 12px}
+.cm{display:flex;align-items:flex-start;gap:8px;margin-top:12px}
+.cm.cont{margin-top:3px}
+.cm.mine{justify-content:flex-end}
+.cm-av{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px}
+.cm.cont .cm-av{background:transparent!important}
+.cm-col{max-width:82%;min-width:0;display:flex;flex-direction:column;align-items:flex-start}
+.cm.mine .cm-col{align-items:flex-end}
+.cm-meta{font-size:12px;color:var(--muted);margin:0 4px 3px}
+.cm-bubble{background:var(--surface2);border-radius:4px 16px 16px 16px;padding:8px 12px;font-size:15px;line-height:1.4;overflow-wrap:anywhere;user-select:text;-webkit-touch-callout:none}
+.cm.cont .cm-bubble{border-radius:16px}
+.cm.mine .cm-bubble{background:#5a2e1f;border-radius:16px 4px 16px 16px;cursor:default}
+.cm.mine.cont .cm-bubble{border-radius:16px}
+.cm-t{display:inline;min-height:0;padding:1px 7px;margin-right:2px;border:0;border-radius:99px;background:rgba(76,154,255,.22);color:#9cc5ff;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.cm-edited{font-size:12px;color:var(--muted)}
+.cm-under{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:3px}
+.cm.mine .cm-under{justify-content:flex-end}
+.cm-r{min-height:26px;padding:0 8px;border-radius:99px;font-size:13px;background:var(--surface);border-color:var(--border)}
+.cm-r.on{border-color:var(--accent);background:rgba(232,100,58,.15)}
+.cm-radd{color:var(--muted);opacity:.55;padding:0 7px}
+.cm-picker,.cm-acts{display:none;gap:4px}
+.cm.picking .cm-picker,.cm.acting .cm-acts{display:inline-flex}
+.cm.picking .cm-radd{opacity:1;border-color:var(--accent)}
+.cm-acts .btn-sm{min-height:30px;font-size:13px;padding:2px 10px}
+.cm-editbar{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--maybe);padding:4px 2px 0}
+.cm-form{position:sticky;bottom:0;display:flex;align-items:flex-end;gap:8px;padding:10px 0 calc(6px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--border)}
+.cm-form textarea{flex:1;min-height:42px;height:42px;max-height:140px;padding:9px 12px;border-radius:21px;resize:none;font-size:15px;line-height:1.4}
+.cm-time{flex:none;min-height:42px;padding:0 12px;border-radius:21px;font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cm-time.on{background:rgba(76,154,255,.2);border-color:#4c9aff;color:#9cc5ff;font-weight:700}
+.cm-send{flex:none;width:42px;height:42px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
+.cm-send svg{width:20px;height:20px;fill:currentColor;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
+@media (hover: hover){ .cm:hover .cm-radd{opacity:1} }
 .w-only{display:none}
 .w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
@@ -526,6 +563,7 @@ body.is-paused .eq i{animation-play-state:paused}
       <div class="np-track"></div>
       <div class="np-loop hidden" id="npLoop"></div>
       <div class="np-mark hidden" id="npMarkA"></div>
+      <div class="np-cmmarks" id="npCmMarks"></div>
       <input type="range" id="npSeek" min="0" max="1000" value="0" aria-label="Position">
     </div>
     <div class="row between np-times"><span id="npTime">0:00</span><span id="npDur">0:00</span></div>
@@ -570,6 +608,7 @@ body.is-paused .eq i{animation-play-state:paused}
       <button type="button" data-np="tab" data-v="lyrics">Paroles</button>
       <button type="button" data-np="tab" data-v="tabs">Tabs</button>
       <button type="button" data-np="tab" data-v="notes">Notes</button>
+      <button type="button" data-np="tab" data-v="comments" aria-label="Commentaires"><span class="w-only">Avis </span>💬<span id="npCmCount"></span></button>
     </div>
     <div id="npText"></div>
    </div>
@@ -932,6 +971,7 @@ async function route() {
     else if (view === 'ecoute') await viewListen();
     else if (view === 'notifications') await viewNotifications();
     else await viewRehearsals();
+    if (view === 'ecoute' && id) openDemo(id); // lien d'une notification vers une démo
   } catch (e) {
     $app.innerHTML = `<div class="empty">Impossible de charger les données.<br><br><button onclick="route()">Réessayer</button></div>`;
   }
@@ -1894,7 +1934,7 @@ function fmtAgo(ts) {
 }
 async function viewListen($app = APP) {
   const [songs, heard] = await Promise.all([
-    q(db.from('songs').select('id,title,cover_path,bpm,song_audio(id,title,path,created_at,added_by)')),
+    q(db.from('songs').select('id,title,cover_path,bpm,song_audio(id,title,path,created_at,added_by,audio_comments(count))')),
     q(db.from('audio_listens').select('audio_id').eq('member', state.me)),
   ]);
   Listen.heard = new Set((heard || []).map(h => h.audio_id));
@@ -1906,7 +1946,8 @@ async function viewListen($app = APP) {
   state.listenAll = {};
   list.forEach(s => s.recs.forEach(a => {
     state.listenAll[a.id] = { songId: s.id, audioId: a.id, title: s.title, audioTitle: a.title || 'Sans titre', url: urlOf(a.path),
-      cover: urlOf(s.cover_path), bpm: s.bpm, addedBy: a.added_by, createdAt: a.created_at };
+      cover: urlOf(s.cover_path), bpm: s.bpm, addedBy: a.added_by, createdAt: a.created_at,
+      nComments: (a.audio_comments && a.audio_comments[0] && a.audio_comments[0].count) || 0 };
   }));
   // « Tout lire » et la suite de la lecture : la dernière version de chaque morceau, dans l'ordre de la liste
   state.listenQueue = list.map(s => state.listenAll[s.recs[0].id]);
@@ -1921,6 +1962,7 @@ async function viewListen($app = APP) {
         <div class="lrow-title">${eq}<span class="lrow-name">${esc(ver ? t.audioTitle : t.title)}</span></div>
         <div class="muted small lrow-sub">${esc((ver ? [t.addedBy, fmtAgo(t.createdAt)] : [t.audioTitle, t.addedBy, fmtAgo(t.createdAt)]).filter(Boolean).join(' · '))}</div>
       </div>
+      ${t.nComments ? `<span class="lrow-cm" title="${t.nComments} commentaire${t.nComments > 1 ? 's' : ''}">💬 ${t.nComments}</span>` : ''}
       <span class="lrow-new" title="Pas encore écoutée"></span>
     </div>`;
   $app.innerHTML = `
@@ -1943,6 +1985,19 @@ async function viewListen($app = APP) {
   `;
   Player.highlight();
 }
+// Lien d'une notification (#/ecoute/<démo>) : la démo est prête à jouer, ouverte sur ses commentaires
+function openDemo(id) {
+  history.replaceState(null, '', location.pathname + location.search + '#/ecoute');
+  const t = state.listenAll && state.listenAll[id];
+  if (!t) { toast("Cette démo n'existe plus"); return; }
+  Np.tab = 'comments'; Np.cmJump = true;
+  const cur = Player.queue[Player.i];
+  if (!cur || cur.audioId !== id) {
+    const i = (state.listenQueue || []).indexOf(t);
+    if (i >= 0) Player.start(state.listenQueue, i, true); else Player.start([t], 0, true);
+  }
+  if (Np.isOpen) Np.renderText(); else openNowPlaying();
+}
 // Ouvre « En lecture » : à droite de la liste sur ordinateur, en plein écran sur téléphone
 function openNowPlaying() {
   if (isWide() && /^#\/ecoute/.test(location.hash)) Np.dock(); else Np.open();
@@ -1954,13 +2009,13 @@ const Player = {
   audio: document.getElementById('plAudio'),
   el: id => document.getElementById(id),
   fmt(t) { if (!isFinite(t)) return '0:00'; t = Math.floor(t); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); },
-  start(queue, i) { this.queue = queue.slice(); this.play(i); },
-  play(i) {
+  start(queue, i, noAutoplay) { this.queue = queue.slice(); this.play(i, noAutoplay); },
+  play(i, noAutoplay) {
     if (i < 0 || i >= this.queue.length) return;
     this.i = i;
     const t = this.queue[i];
     this.audio.src = t.url;
-    this.audio.play().catch(() => {});
+    if (noAutoplay) { this.audio.load(); this.setIcon(); } else this.audio.play().catch(() => {});
     this.el('player').classList.remove('hidden');
     document.body.classList.add('playing');
     this.el('plTitle').textContent = t.title;
@@ -2516,6 +2571,7 @@ const Np = {
         q(db.from('songs').select('id,title,lyrics,tabs,notes,bpm').eq('id', t.songId).maybeSingle()),
         q(db.from('song_files').select('id,title,path,kind').eq('song_id', t.songId).order('created_at')),
         t.audioId ? q(db.from('tab_markers').select('*').eq('audio_id', t.audioId)) : Promise.resolve([]),
+        this.loadComments(t),
       ]);
       if (s) { this.songs[t.songId] = s; t.bpm = s.bpm; }
       const urlOf = await signedUrls((files || []).map(f => f.path));
@@ -2527,7 +2583,7 @@ const Np = {
     } catch (e) { this.docs = this.docs || []; }
     if (this.track() !== t) return;
     const s = this.songs[t.songId] || {};
-    const has = tab => tab === 'tabs' ? this.docs.length > 0 : !!s[tab];
+    const has = tab => tab === 'comments' ? !!t.audioId : tab === 'tabs' ? this.docs.length > 0 : !!s[tab];
     if (!this.tab || !has(this.tab)) this.tab = this.docs.length ? 'tabs' : s.lyrics ? 'lyrics' : s.notes ? 'notes' : 'lyrics';
     if (!this.docs.some(d => d.id === this.docId)) this.docId = this.docs[0]?.id || null;
     this.renderTempo(); this.renderText();
@@ -2536,6 +2592,7 @@ const Np = {
     const t = this.track(), s = (t && this.songs[t.songId]) || {};
     document.querySelectorAll('#npTabs [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === this.tab));
     if (this.tab === 'tabs' && this.docs && this.docs.length) return this.renderTabs();
+    if (this.tab === 'comments') return this.renderComments();
     const val = s[this.tab] || '';
     const label = { lyrics: 'de paroles', tabs: 'de tabs', notes: 'de notes' }[this.tab];
     this.el('npText').innerHTML = val
@@ -2586,6 +2643,183 @@ const Np = {
     this.el('npFollow').addEventListener('change', e => { this.follow = e.target.checked; this.followPaused = false; this.el('npResume').classList.add('hidden'); this.syncDoc(true); });
     await renderDoc(box, doc, this.docZoom);
     this.syncDoc(true);
+  },
+  // ----- Commentaires sur la démo (une discussion par version) -----
+  comments: [], cmT: null, cmEdit: null, cmJump: false,
+  async loadComments(t) {
+    t = t || this.track();
+    if (!t || !t.audioId) { this.comments = []; return; }
+    try {
+      const rows = await q(db.from('audio_comments').select('*, audio_comment_reactions(member,emoji)').eq('audio_id', t.audioId).order('created_at'));
+      if (this.track() === t) this.comments = rows || [];
+    } catch (e) { this.comments = []; }
+    this.renderCmCount(); this.renderCmMarks();
+  },
+  renderCmCount() {
+    const n = this.comments.length, c = this.el('npCmCount');
+    if (c) c.textContent = n ? ' ' + n : '';
+  },
+  // Petits traits sur la barre de lecture aux moments commentés
+  renderCmMarks() {
+    const box = this.el('npCmMarks'), d = Player.audio.duration;
+    if (!box) return;
+    box.innerHTML = d ? this.comments.filter(c => c.t != null && c.t <= d).map(c => `<i style="left:${c.t / d * 100}%"></i>`).join('') : '';
+  },
+  renderComments() {
+    const t = this.track();
+    if (!t || !t.audioId) { this.el('npText').innerHTML = '<div class="empty">Pas de commentaires pour cet enregistrement.</div>'; return; }
+    const draft = this.el('cmInput')?.value || '';
+    this.el('npText').innerHTML = `
+      <div class="cm-list" id="cmList"></div>
+      <div class="cm-editbar hidden" id="cmEditBar"><span>Modification du message</span><button type="button" class="btn-sm btn-ghost" data-np="cmcancel">Annuler</button></div>
+      <div class="cm-form" id="cmForm">
+        <button type="button" class="cm-time" data-np="cmtime" id="cmTime" title="Ajouter le moment de la démo">⏱</button>
+        <textarea id="cmInput" rows="1" maxlength="2000" placeholder="Écrire un commentaire…"></textarea>
+        <button type="button" class="cm-send" data-np="cmsend" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z"/></svg></button>
+      </div>`;
+    this.el('cmInput').value = draft;
+    this.cmT = null; this.cmEdit = null;
+    this.renderCmList(true);
+    this.renderTimeBtn(); this.growInput();
+    if (this.cmJump) { this.cmJump = false; setTimeout(() => this.el('npTabs')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 50); }
+  },
+  memberColor(name) {
+    const pal = ['#e8643a', '#4c9aff', '#3fb96b', '#e3b341', '#b07cff', '#ff6b9a', '#2ec4c4', '#a3a3ad'];
+    const i = state.members.indexOf(name);
+    return pal[(i >= 0 ? i : [...name].reduce((n, c) => n + c.charCodeAt(0), 0)) % pal.length];
+  },
+  fmtWhen(ts) {
+    const d = new Date(ts);
+    if (isNaN(d)) return '';
+    const hm = d.toLocaleTimeString('fr-CH', { hour: '2-digit', minute: '2-digit' });
+    const days = Math.round((dateObj(todayISO()) - dateObj(isoOf(d))) / 86400000);
+    if (days <= 0) return hm;
+    if (days === 1) return 'hier ' + hm;
+    return d.toLocaleDateString('fr-CH', { day: 'numeric', month: 'short' }) + ' ' + hm;
+  },
+  renderCmList(toBottom) {
+    const list = this.el('cmList');
+    if (!list) return;
+    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+    const C = this.comments;
+    list.innerHTML = C.length ? C.map((c, i) => {
+      const mine = c.member === state.me, prev = C[i - 1];
+      // Messages qui se suivent de la même personne : on n'affiche le nom qu'une fois
+      const cont = prev && prev.member === c.member && new Date(c.created_at) - new Date(prev.created_at) < 5 * 60000;
+      const reacts = {};
+      (c.audio_comment_reactions || []).forEach(r => { (reacts[r.emoji] = reacts[r.emoji] || []).push(r.member); });
+      const body = esc(c.body).replace(/\n/g, '<br>');
+      return `<div class="cm${mine ? ' mine' : ''}${cont ? ' cont' : ''}" data-id="${c.id}">
+        ${mine ? '' : `<span class="cm-av" style="background:${this.memberColor(c.member)}">${cont ? '' : esc(c.member.charAt(0).toUpperCase())}</span>`}
+        <div class="cm-col">
+          ${cont ? '' : `<div class="cm-meta">${mine ? '' : `<strong style="color:${this.memberColor(c.member)}">${esc(c.member)}</strong> · `}${this.fmtWhen(c.created_at)}</div>`}
+          <div class="cm-bubble">${c.t != null ? `<button type="button" class="cm-t" data-np="cmseek" data-t="${c.t}">⏱ ${Player.fmt(c.t)}</button> ` : ''}${body}${c.edited_at ? ' <span class="cm-edited">(modifié)</span>' : ''}</div>
+          <div class="cm-under">
+            ${Object.entries(reacts).map(([e, who]) => `<button type="button" class="cm-r${who.includes(state.me) ? ' on' : ''}" data-np="cmreact" data-id="${c.id}" data-e="${e}" title="${esc(who.join(', '))}">${e} ${who.length}</button>`).join('')}
+            <button type="button" class="cm-r cm-radd" data-np="cmpick" aria-label="Réagir">☺</button>
+            <span class="cm-picker">${['👍', '🔥', '❤️'].map(e => `<button type="button" class="cm-r" data-np="cmreact" data-id="${c.id}" data-e="${e}">${e}</button>`).join('')}</span>
+            ${mine ? `<span class="cm-acts"><button type="button" class="btn-sm" data-np="cmedit" data-id="${c.id}">Modifier</button><button type="button" class="btn-sm btn-danger" data-np="cmdel" data-id="${c.id}">Supprimer</button></span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('') : `<div class="cm-empty">Pas encore de commentaire sur cette version.<br>Donne ton avis, et touche ⏱ pour indiquer un moment précis.</div>`;
+    if (toBottom || atBottom) list.scrollTop = list.scrollHeight;
+    this.renderCmCount();
+  },
+  showActions(m) {
+    this.el('npText').querySelectorAll('.cm.picking,.cm.acting').forEach(x => x.classList.remove('picking', 'acting'));
+    m.classList.add('acting');
+    try { navigator.vibrate && navigator.vibrate(12); } catch (e) { /* ignoré */ }
+  },
+  growInput() {
+    const i = this.el('cmInput');
+    if (!i) return;
+    i.style.height = 'auto';
+    i.style.height = Math.min(140, i.scrollHeight + 2) + 'px';
+  },
+  toggleCmTime() {
+    this.cmT = this.cmT == null ? Math.round(Player.audio.currentTime * 10) / 10 : null;
+    this.renderTimeBtn();
+  },
+  renderTimeBtn() {
+    const b = this.el('cmTime');
+    if (!b) return;
+    b.classList.toggle('on', this.cmT != null);
+    b.textContent = this.cmT != null ? `⏱ ${Player.fmt(this.cmT)} ✕` : '⏱';
+    b.title = this.cmT != null ? 'Retirer le moment' : 'Ajouter le moment de la démo';
+  },
+  async sendComment() {
+    const t = this.track(), input = this.el('cmInput');
+    if (!t || !t.audioId || !input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    lastLocalAction = Date.now();
+    if (this.cmEdit) {
+      const id = this.cmEdit;
+      await q(db.from('audio_comments').update({ body: text, edited_at: new Date().toISOString() }).eq('id', id));
+      const c = this.comments.find(x => x.id === id);
+      if (c) { c.body = text; c.edited_at = new Date().toISOString(); }
+      this.cancelEdit();
+      input.value = ''; this.growInput();
+      this.renderCmList();
+      return;
+    }
+    const row = { id: uuid(), audio_id: t.audioId, member: state.me, body: text, t: this.cmT, created_at: new Date().toISOString() };
+    input.value = ''; this.growInput();
+    this.cmT = null; this.renderTimeBtn();
+    this.comments.push({ ...row, audio_comment_reactions: [] });
+    this.renderCmList(true); this.renderCmMarks();
+    try { await q(db.from('audio_comments').insert(row)); }
+    catch (e) { this.comments = this.comments.filter(c => c.id !== row.id); this.renderCmList(); input.value = text; return; }
+    notify('comment', `${state.me} a commenté « ${t.title} · ${t.audioTitle} »`,
+      (row.t != null ? `⏱ ${Player.fmt(row.t)} · ` : '') + short(text, 140), '#/ecoute/' + t.audioId, 'comment:' + t.audioId);
+  },
+  editComment(id) {
+    const c = this.comments.find(x => x.id === id), input = this.el('cmInput');
+    if (!c || !input) return;
+    this.cmEdit = id;
+    input.value = c.body; this.growInput(); input.focus();
+    this.el('cmEditBar').classList.remove('hidden');
+    this.el('cmTime').classList.add('hidden');
+    this.el('npText').querySelectorAll('.cm.acting').forEach(x => x.classList.remove('acting'));
+  },
+  cancelEdit() {
+    this.cmEdit = null;
+    this.el('cmEditBar')?.classList.add('hidden');
+    this.el('cmTime')?.classList.remove('hidden');
+    const input = this.el('cmInput');
+    if (input) { input.value = ''; this.growInput(); }
+  },
+  async deleteComment(id) {
+    if (!confirm('Supprimer ce message ?')) return;
+    lastLocalAction = Date.now();
+    await q(db.from('audio_comments').delete().eq('id', id));
+    this.comments = this.comments.filter(c => c.id !== id);
+    if (this.cmEdit === id) this.cancelEdit();
+    this.renderCmList(); this.renderCmMarks();
+  },
+  async react(id, e) {
+    const c = this.comments.find(x => x.id === id);
+    if (!c) return;
+    lastLocalAction = Date.now();
+    const R = c.audio_comment_reactions = c.audio_comment_reactions || [];
+    const had = R.some(r => r.member === state.me && r.emoji === e);
+    if (had) {
+      c.audio_comment_reactions = R.filter(r => !(r.member === state.me && r.emoji === e));
+      this.renderCmList();
+      await q(db.from('audio_comment_reactions').delete().eq('comment_id', id).eq('member', state.me).eq('emoji', e));
+    } else {
+      R.push({ member: state.me, emoji: e });
+      this.renderCmList();
+      await q(db.from('audio_comment_reactions').upsert({ comment_id: id, member: state.me, emoji: e }, { onConflict: 'comment_id,member,emoji' }));
+    }
+  },
+  // Nouveau message ou réaction d'un autre membre : on met à jour la discussion ouverte
+  async refreshComments() {
+    const t = this.track();
+    if (!this.isOpen || !t) return;
+    await this.loadComments(t);
+    if (this.tab === 'comments') this.renderCmList();
   },
   renderMarkers() {
     const m = this.markers(), btn = this.el('npMarkBtn');
@@ -2821,7 +3055,15 @@ const Np = {
     else if (v === 'b-') Np.nudge('b', -0.5);
     else if (v === 'b+') Np.nudge('b', 0.5);
     else if (v === 'loopclear') Np.clearLoop();
-    else if (v === 'tab') { Np.tab = b.dataset.v; Np.renderText(); }
+    else if (v === 'tab') { Np.tab = b.dataset.v; if (Np.tab === 'comments') Np.cmJump = true; Np.renderText(); }
+    else if (v === 'cmtime') Np.toggleCmTime();
+    else if (v === 'cmsend') Np.sendComment();
+    else if (v === 'cmseek') { a.currentTime = Number(b.dataset.t) || 0; if (a.paused) a.play().catch(() => {}); }
+    else if (v === 'cmpick') { const m = b.closest('.cm'); const was = m.classList.contains('picking'); Np.el('npText').querySelectorAll('.cm.picking,.cm.acting').forEach(x => x.classList.remove('picking', 'acting')); if (!was) m.classList.add('picking'); }
+    else if (v === 'cmreact') Np.react(b.dataset.id, b.dataset.e);
+    else if (v === 'cmedit') Np.editComment(b.dataset.id);
+    else if (v === 'cmdel') Np.deleteComment(b.dataset.id);
+    else if (v === 'cmcancel') Np.cancelEdit();
     else if (v === 'doc') { Np.docId = b.dataset.v; Np.renderTabs(); }
     else if (v === 'dzoom-') Np.setDocZoom(Np.docZoom - 0.25);
     else if (v === 'dzoom+') Np.setDocZoom(Np.docZoom + 0.25);
@@ -2840,7 +3082,22 @@ const Np = {
   Np.el('npTempo').addEventListener('input', e => Np.setRate(Number(e.target.value) / 100));
   seek.addEventListener('input', () => { Np.dragging = true; if (a.duration) Np.el('npTime').textContent = Player.fmt(seek.value / 1000 * a.duration); });
   seek.addEventListener('change', () => { if (a.duration) a.currentTime = seek.value / 1000 * a.duration; Np.dragging = false; Np.progress(); });
-  a.addEventListener('loadedmetadata', () => Np.renderLoop());
+  a.addEventListener('loadedmetadata', () => { Np.renderLoop(); Np.renderCmMarks(); });
+  // Appui long (ou clic droit) sur un de ses messages : Modifier / Supprimer
+  let lp = null;
+  np.addEventListener('pointerdown', e => {
+    const m = e.target.closest('.cm.mine .cm-bubble');
+    if (!m || e.target.closest('button')) return;
+    lp = { x: e.clientX, y: e.clientY, timer: setTimeout(() => { Np.showActions(m.closest('.cm')); lp = null; }, 500) };
+  });
+  const lpCancel = e => { if (lp && (!e || e.type !== 'pointermove' || Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 8)) { clearTimeout(lp.timer); lp = null; } };
+  ['pointerup', 'pointercancel', 'pointermove'].forEach(ev => np.addEventListener(ev, lpCancel));
+  np.addEventListener('click', e => { if (!e.target.closest('.cm')) Np.el('npText').querySelectorAll('.cm.picking,.cm.acting').forEach(x => x.classList.remove('picking', 'acting')); });
+  np.addEventListener('contextmenu', e => { const m = e.target.closest('.cm.mine .cm-bubble'); if (m) { e.preventDefault(); Np.showActions(m.closest('.cm')); } });
+  np.addEventListener('keydown', e => {
+    if (e.target.id === 'cmInput' && e.key === 'Enter' && !e.shiftKey && isWide()) { e.preventDefault(); Np.sendComment(); }
+  });
+  np.addEventListener('input', e => { if (e.target.id === 'cmInput') Np.growInput(); });
   ['play', 'seeked', 'ratechange'].forEach(ev => a.addEventListener(ev, () => Np.scheduleLoop()));
   a.addEventListener('seeked', () => Np.syncDoc(true)); // on avance ou recule : la tab saute au bon endroit
   a.addEventListener('timeupdate', () => { if (a.paused) return; if (document.hidden) Np.syncDoc(); });
@@ -2880,7 +3137,7 @@ const NOTIF_TYPES = [
     ['setlist_note', 'Notes sur les morceaux d\'une répète']] },
   { group: 'Morceaux', icon: 'song', items: [
     ['song_new', 'Nouveau morceau'], ['song_text', 'Paroles, tabs, notes et titre'], ['level', 'Niveau des autres'],
-    ['perso_note', 'Notes perso des autres'], ['audio', 'Enregistrements'], ['cover', 'Pochettes'], ['song_delete', 'Morceau supprimé']] },
+    ['perso_note', 'Notes perso des autres'], ['audio', 'Enregistrements'], ['comment', 'Commentaires sur les démos'], ['cover', 'Pochettes'], ['song_delete', 'Morceau supprimé']] },
   { group: 'Rappels', icon: 'clock', items: [['reminder', 'Rappel avant la répète'], ['dispo_reminder', 'Rappel si tu n\'as pas répondu ou répondu « peut-être »']] },
   { group: 'Groupe', icon: 'group', items: [['group', 'Nom du groupe et membres']] },
 ];
@@ -3092,6 +3349,11 @@ async function startRealtime() {
 }
 function stopRealtime() { if (rtChannel) { db.removeChannel(rtChannel); rtChannel = null; } }
 function onRealtime(p) {
+  if (p.table === 'audio_comments' || p.table === 'audio_comment_reactions') {
+    if (Date.now() - lastLocalAction > 1500) Np.refreshComments();
+    if (location.hash.startsWith('#/ecoute')) scheduleRefresh(); // compteurs 💬 de la liste
+    return;
+  }
   if (p.table === 'notifications') {
     const row = (p.new && Object.keys(p.new).length) ? p.new : p.old;
     if (!row || row.member !== state.me) return;

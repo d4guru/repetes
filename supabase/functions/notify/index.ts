@@ -14,7 +14,7 @@ const MIN_PRESENT = 4;
 const TZ = 'Europe/Zurich';
 const TYPES = new Set([
   'reh_new', 'reh_edit', 'reh_delete', 'dispo', 'vote_open', 'vote', 'reh_status', 'setlist', 'bilan', 'setlist_note',
-  'song_new', 'song_text', 'level', 'perso_note', 'audio', 'cover', 'song_delete', 'group', 'reminder', 'dispo_reminder',
+  'song_new', 'song_text', 'level', 'perso_note', 'audio', 'comment', 'cover', 'song_delete', 'group', 'reminder', 'dispo_reminder',
 ]);
 const DEFAULT_REMINDERS = [{ days: 1, time: '18:00' }];
 const DEFAULT_DISPO_REMINDERS = [{ days: 3, time: '18:00' }, { days: 1, time: '18:00' }];
