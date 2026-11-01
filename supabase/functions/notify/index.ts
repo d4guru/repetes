@@ -155,8 +155,10 @@ async function handleReminders() {
       const answer = (r.availability || []).find((a: any) => a.member === member)?.status;
       const p = prefs.get(member);
       const kinds: [string, { days: number; time: string }[]][] = [];
-      if (answer !== 'non' && wants(prefs, member, 'reminder')) kinds.push(['reminder', p?.reminders ?? DEFAULT_REMINDERS]);
-      if (!answer && wants(prefs, member, 'dispo_reminder')) kinds.push(['dispo_reminder', p?.dispo_reminders ?? DEFAULT_DISPO_REMINDERS]);
+      const undecided = !answer || answer === 'peut-etre';
+      // Rappel de répète pour ceux qui viennent ; ceux qui n'ont pas tranché reçoivent le rappel de dispo à la place
+      if (answer === 'oui' && wants(prefs, member, 'reminder')) kinds.push(['reminder', p?.reminders ?? DEFAULT_REMINDERS]);
+      if (undecided && wants(prefs, member, 'dispo_reminder')) kinds.push(['dispo_reminder', p?.dispo_reminders ?? DEFAULT_DISPO_REMINDERS]);
       for (const [kind, slots] of kinds) {
         for (const s of slots || []) {
           const slot = `${s.days}@${s.time}`;
@@ -165,9 +167,12 @@ async function handleReminders() {
           done.add(`${member}|${r.id}|${kind}|${slot}`);
           const when = r.date === today ? "aujourd'hui" : r.date === shiftDate(today, -1) ? 'demain' : fmtLong(r.date);
           const details = `${fmtLong(r.date)} à ${r.time || '20:00'}${r.place ? ' · ' + r.place : ''}`;
+          const whenDu = when === "aujourd'hui" || when === 'demain' ? when : 'du ' + when;
           rows.push(kind === 'reminder'
             ? { member, type: kind, title: `Rappel : répète ${when}`, body: details, link: `#/repete/${r.id}`, actor: null, group_key: null }
-            : { member, type: kind, title: 'Ta dispo ?', body: `Tu n'as pas encore répondu pour la répète ${when === "aujourd'hui" || when === 'demain' ? when : 'du ' + when} (${r.time || '20:00'}).`, link: `#/repete/${r.id}`, actor: null, group_key: null });
+            : answer === 'peut-etre'
+              ? { member, type: kind, title: 'Tu viens ?', body: `Tu as répondu « peut-être » pour la répète ${whenDu} (${r.time || '20:00'}). Dis-nous si tu viens !`, link: `#/repete/${r.id}`, actor: null, group_key: null }
+              : { member, type: kind, title: 'Ta dispo ?', body: `Tu n'as pas encore répondu pour la répète ${whenDu} (${r.time || '20:00'}).`, link: `#/repete/${r.id}`, actor: null, group_key: null });
           logRows.push({ member, rehearsal_id: r.id, kind, slot });
         }
       }

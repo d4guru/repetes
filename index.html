@@ -173,7 +173,17 @@ body.sheet-open{overflow:hidden}
 .pill.warn{background:rgba(227,179,65,.16);color:#e9c46a}
 .pill.ok{background:rgba(63,185,107,.16);color:#5fcf88}
 .pill.no{background:rgba(229,83,75,.15);color:#ef7b74}
-.cal-pill{position:absolute;top:5px;right:5px;width:12px;height:5px;border-radius:3px;background:#e9c46a}
+.pill.past{background:rgba(122,122,133,.16);color:#a6a6b0}
+.cal-dow{color:var(--muted)!important}
+.banner{display:block;position:relative;margin:0 0 16px;padding:14px 16px 14px 20px;border-radius:var(--radius);
+  background:var(--surface);border:1px solid var(--border);
+  background:linear-gradient(90deg, color-mix(in srgb, var(--c) 16%, var(--surface)), var(--surface) 75%);border-color:color-mix(in srgb, var(--c) 45%, var(--border))}
+.banner::before{content:'';position:absolute;left:0;top:12px;bottom:12px;width:5px;border-radius:0 4px 4px 0;background:var(--c)}
+.banner-label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.banner-title{display:block;font-size:20px;font-weight:700;margin-top:2px}
+.banner-state{display:flex;align-items:center;gap:8px;margin-top:6px;font-weight:650;color:var(--c)}
+.banner-dot{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
+.banner-next{display:block;margin-top:8px;font-size:14px;color:var(--muted)}
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .cal-head h2{margin:0;text-transform:capitalize}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
@@ -369,26 +379,26 @@ const MIN_PRESENT = 4;                     // votes « On maintient » nécessai
 function dateObj(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d, 12); }
 function isoOf(dt) { return dt.toLocaleDateString('sv-SE'); }
 function dayInfo(iso) { return DAYS[dateObj(iso).getDay()]; }
-function dayChip(iso) {
-  const d = dayInfo(iso);
-  return `<span class="chip" style="background:${d.color}2e;color:${d.color}">${d.name}</span>`;
-}
 function nextWeekday(fromIso, wd) {
   const dt = dateObj(fromIso);
   dt.setDate(dt.getDate() + ((wd - dt.getDay() + 7) % 7));
   return isoOf(dt);
 }
-// État d'une répète selon les absents et le vote « on répète quand même ? »
-// Règle : le vote s'ouvre quand tout le monde a répondu ; la répète est maintenue
-// si TOUS les présents votent « On maintient ». Moins de 4 présents = annulée par défaut.
-// États : normal · attente (réponses manquantes) · vote · maintenue · annulee
+// État d'une répète selon les dispos et le vote « on répète quand même ? »
+// - Personne d'absent : « confirmee » si tout le monde a répondu oui, sinon « attente »
+//   (réponses manquantes ou « peut-être » : le peut-être bloque la confirmation)
+// - Au moins un absent : le vote s'ouvre quand tout le monde a répondu ; la répète est maintenue
+//   si TOUS les présents votent « On maintient ». Moins de 4 présents = annulée par défaut.
+// États : confirmee · attente · vote · maintenue · annulee
 function rehState(r) {
   const av = r.availability || [], votes = r.rehearsal_votes || [];
-  const answered = state.members.filter(m => av.some(a => a.member === m));
-  const pending = state.members.filter(m => !answered.includes(m));
-  const absents = state.members.filter(m => av.some(a => a.member === m && a.status === 'non'));
-  const base = { absents, pending, voters: [], maintain: [], annul: [], tooFew: false, open: false };
-  if (!absents.length) return { ...base, s: 'normal' };
+  const statusOf = m => av.find(a => a.member === m)?.status;
+  const pending = state.members.filter(m => !statusOf(m));
+  const absents = state.members.filter(m => statusOf(m) === 'non');
+  const maybes = state.members.filter(m => statusOf(m) === 'peut-etre');
+  const present = state.members.filter(m => statusOf(m) === 'oui');
+  const base = { absents, pending, maybes, present, voters: [], maintain: [], annul: [], tooFew: false, open: false };
+  if (!absents.length) return { ...base, s: state.members.length && !pending.length && !maybes.length ? 'confirmee' : 'attente' };
   const voters = state.members.filter(m => !absents.includes(m)); // les absents ne votent pas
   const vOf = m => votes.find(v => v.member === m)?.vote;
   const maintain = voters.filter(m => vOf(m) === 'maintenir');
@@ -402,22 +412,47 @@ function rehState(r) {
   else s = 'vote';
   return { ...base, s, voters, maintain, annul, tooFew, open };
 }
+// Texte court de l'état (pilules, bandeau)
+function stateText(r) {
+  const st = rehState(r), n = state.members.length;
+  const names = st.absents.join(', ');
+  switch (st.s) {
+    case 'confirmee': return `On répète · ${st.present.length}/${n} présents`;
+    case 'maintenue': return `On répète · maintenue${st.tooFew ? ' quand même' : ''} sans ${names}`;
+    case 'annulee': return st.annul.length ? `Annulée · absent${st.absents.length > 1 ? 's' : ''} : ${names}`
+      : `Annulée · moins de ${MIN_PRESENT} · absent${st.absents.length > 1 ? 's' : ''} : ${names}`;
+    case 'vote': return `Vote en cours · il manque ${names} (${st.maintain.length}/${st.voters.length})`;
+    default:
+      if (st.absents.length) return `Il manque ${names} · en attente ${n - st.pending.length}/${n}`;
+      if (st.pending.length) return `En attente · ${n - st.pending.length}/${n} réponses`;
+      return `En attente · peut-être : ${st.maybes.join(', ')}`;
+  }
+}
+const STATE_COLOR = { confirmee: '#3fb96b', maintenue: '#3fb96b', attente: '#e3b341', vote: '#e3b341', annulee: '#e5534b' };
+const PAST_COLOR = '#7a7a85';
+function rehColor(r) { return r.date < todayISO() ? PAST_COLOR : STATE_COLOR[rehState(r).s]; }
 function stateHtml(r) {
-  const st = rehState(r);
-  const names = esc(st.absents.join(', '));
-  const abs = `absent${st.absents.length > 1 ? 's' : ''} : ${names}`;
-  const pill = (cls, txt) => `<div class="pill-row"><span class="pill ${cls}">${txt}</span></div>`;
-  if (st.s === 'normal') return '';
-  if (st.s === 'maintenue') return pill('ok', `Maintenue${st.tooFew ? ' quand même' : ''} sans ${names}`);
-  if (st.s === 'annulee') return st.annul.length
-    ? pill('no', `Annulée · ${abs}`)
-    : pill('no', `Annulée · moins de ${MIN_PRESENT} · ${abs}`);
-  if (st.s === 'attente') return pill('warn', `Il manque ${names} · En attente ${state.members.length - st.pending.length}/${state.members.length}`);
-  return pill('warn', `Il manque ${names} · Vote ${st.maintain.length}/${st.voters.length}`);
+  const s = rehState(r).s;
+  const cls = s === 'annulee' ? 'no' : (s === 'confirmee' || s === 'maintenue') ? 'ok' : 'warn';
+  return `<div class="pill-row"><span class="pill ${r.date < todayISO() ? 'past' : cls}">${esc(stateText(r))}</span></div>`;
+}
+// Bandeau « Prochaine répète » (et la suivante si la prochaine est annulée)
+function nextBannerHtml(list) {
+  const today = todayISO();
+  const up = list.filter(r => r.date >= today);
+  if (!up.length) return '';
+  const first = up[0];
+  const then = rehState(first).s === 'annulee' ? up.slice(1).find(r => rehState(r).s !== 'annulee') : null;
+  return `<a class="banner" href="#/repete/${first.id}" style="--c:${rehColor(first)}">
+    <span class="banner-label">Prochaine répète</span>
+    <span class="banner-title cap">${esc(fmtDate(first.date, { weekday: 'long', day: 'numeric', month: 'long' }))}${first.time ? ' · ' + esc(first.time) : ''}</span>
+    <span class="banner-state"><span class="banner-dot"></span>${esc(stateText(first))}</span>
+    ${then ? `<span class="banner-next cap">Suivante : ${esc(fmtDate(then.date, { weekday: 'long', day: 'numeric', month: 'short' }))} · ${esc(stateText(then))}</span>` : ''}
+  </a>`;
 }
 function decisionHtml(r) {
   const st = rehState(r);
-  if (st.s === 'normal') return '';
+  if (!st.absents.length) return '';
   const myVote = (r.rehearsal_votes || []).find(v => v.member === state.me)?.vote;
   const waiting = st.voters.filter(m => !st.maintain.includes(m) && !st.annul.includes(m));
   const absents = `<strong>${esc(st.absents.join(', '))}</strong>`;
@@ -599,13 +634,13 @@ function countsHtml(av) {
 }
 function rehCard(r) {
   const mine = (r.availability || []).find(a => a.member === state.me);
-  const col = dayInfo(r.date).color;
+  const col = rehColor(r);
   const cancelled = rehState(r).s === 'annulee';
   return `<div class="card ${cancelled ? 'cancelled' : ''}" style="border-left:5px solid ${col}">
     <a href="#/repete/${r.id}" style="display:block">
       <div class="row between" style="align-items:flex-start">
         <div class="grow">
-          <div class="title cap"><span style="color:${col}">${esc(fmtDate(r.date, { weekday: 'long' }))}</span> ${esc(fmtDate(r.date, { day: 'numeric', month: 'long' }))}</div>
+          <div class="title cap">${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long' }))}</div>
           <div class="muted small">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</div>
         </div>
         <span class="muted">›</span>
@@ -626,6 +661,7 @@ async function viewRehearsals() {
   $app.innerHTML = `
     <h2>Répètes</h2>
     ${fabHtml('newreh', 'Nouvelle répète')}
+    ${nextBannerHtml(reh)}
     ${up.length ? up.map(rehCard).join('') : `<div class="empty">Aucune répète prévue.<br>Ajoute la prochaine avec le bouton + en bas à droite.</div>`}
     ${past.length ? `<details><summary>Répètes passées (${past.length})</summary>${past.map(rehCard).join('')}</details>` : ''}
   `;
@@ -783,18 +819,19 @@ function monthPane(ym, byDate, today, isCurrent) {
   const [y, m] = ym.split('-').map(Number);
   const first = new Date(y, m - 1, 1, 12), last = new Date(y, m, 0, 12);
   const offset = (first.getDay() + 6) % 7; // semaine commençant le lundi
-  let cells = WEEK_ORDER.map(i => `<div class="cal-dow" style="color:${DAYS[i].color}">${DAYS[i].short}</div>`).join('');
+  let cells = WEEK_ORDER.map(i => `<div class="cal-dow">${DAYS[i].short}</div>`).join('');
   for (let i = 0; i < offset; i++) cells += '<div></div>';
   for (let d = 1; d <= last.getDate(); d++) {
     const iso = `${ym}-${String(d).padStart(2, '0')}`;
     const list = byDate[iso];
     const todayCls = iso === today ? ' today' : '';
     if (list) {
-      const c = dayInfo(iso).color;
-      const warn = list.some(r => ['vote', 'attente'].includes(rehState(r).s));
-      const cancel = list.every(r => rehState(r).s === 'annulee') ? ' cancel' : '';
-      cells += `<a class="cal-cell has${todayCls}${cancel}" href="#/repete/${list[0].id}" style="background:${c}33;border-color:${c};color:${c}">${d}
-        ${warn ? '<span class="cal-pill"></span>' : ''}${list.length > 1 ? `<span class="cal-more">×${list.length}</span>` : ''}</a>`;
+      // Plusieurs répètes le même jour : on montre la première qui n'est pas annulée
+      const main = list.find(r => rehState(r).s !== 'annulee') || list[0];
+      const c = rehColor(main);
+      const cancel = rehState(main).s === 'annulee' ? ' cancel' : '';
+      cells += `<a class="cal-cell has${todayCls}${cancel}" href="#/repete/${main.id}" title="${esc(stateText(main))}" style="background:${c}38;border-color:${c};color:${c}">${d}
+        ${list.length > 1 ? `<span class="cal-more">×${list.length}</span>` : ''}</a>`;
     } else if (iso >= today) {
       // Jour vide (aujourd'hui ou futur) : un appui ouvre la fenêtre de création
       cells += `<div class="cal-cell empty-day${todayCls}" data-act="newreh" data-date="${iso}">${d}</div>`;
@@ -821,17 +858,22 @@ async function viewCalendar(ym) {
   const byDate = {};
   all.forEach(r => (byDate[r.date] = byDate[r.date] || []).push(r));
   const reh = all.filter(r => r.date.startsWith(ym));
+  // Les prochaines répètes (pour le bandeau), quel que soit le mois affiché
+  const upcoming = await q(db.from('rehearsals').select('id,date,time,place,availability(member,status),rehearsal_votes(member,vote)')
+    .gte('date', today).order('date').order('time').limit(8));
+  const legend = [['On répète', STATE_COLOR.confirmee], ['Pas encore décidé', STATE_COLOR.attente], ['Annulée', STATE_COLOR.annulee, 1], ['Passée', PAST_COLOR]];
 
   $app.innerHTML = `
+    ${nextBannerHtml(upcoming)}
     ${swipeFrame('cal', prev, next, monthPane(prev, byDate, today), monthPane(ym, byDate, today, true), monthPane(next, byDate, today))}
     <p class="muted small" style="text-align:center;margin:8px 0 0">Glisse pour changer de mois · touche un jour libre pour créer une répète</p>
-    <div class="legend">${WEEK_ORDER.map(i => `<span class="chip" style="background:${DAYS[i].color}2e;color:${DAYS[i].color}">${DAYS[i].name}</span>`).join('')}</div>
+    <div class="legend">${legend.map(([l, c, strike]) => `<span class="chip" style="background:${c}2e;color:${c}${strike ? ';text-decoration:line-through' : ''}">${l}</span>`).join('')}</div>
 
     <h3>Répètes du mois (${reh.length})</h3>
     ${reh.length ? reh.map(r => {
-      const c = dayInfo(r.date).color;
+      const c = rehColor(r);
       return `<a class="card ${rehState(r).s === 'annulee' ? 'cancelled' : ''}" style="display:block;border-left:5px solid ${c};padding:10px 14px" href="#/repete/${r.id}">
-        <div class="row between"><span class="cap strike"><strong style="color:${c}">${esc(fmtDate(r.date, { weekday: 'long' }))}</strong> ${esc(fmtDate(r.date, { day: 'numeric', month: 'long' }))}</span>
+        <div class="row between"><span class="cap strike"><strong>${esc(fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'long' }))}</strong></span>
         <span class="muted small">${esc(r.time || '')}</span></div>
         ${stateHtml(r)}
       </a>`;
@@ -964,7 +1006,7 @@ async function rehearsalHtml(r, songs, allReh) {
       <span style="opacity:${hasPrev ? 1 : .25}">‹</span> glisse pour changer de répète <span style="opacity:${hasNext ? 1 : .25}">›</span>
     </p>
     <div class="row between wrap">
-      <div class="row wrap" style="gap:8px">${dayChip(r.date)}<span class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</span></div>
+      <div class="row wrap" style="gap:8px"><span class="muted">${esc([r.time, r.place].filter(Boolean).join(' · ') || 'Heure et lieu à préciser')}</span></div>
       <button class="btn-sm" data-act="toggle" data-target="editReh">Modifier</button>
     </div>
     ${stateHtml(r)}
@@ -1339,7 +1381,7 @@ const NOTIF_TYPES = [
   { group: 'Morceaux', icon: 'song', items: [
     ['song_new', 'Nouveau morceau'], ['song_text', 'Paroles, tabs, notes et titre'], ['level', 'Niveau des autres'],
     ['perso_note', 'Notes perso des autres'], ['audio', 'Enregistrements'], ['cover', 'Pochettes'], ['song_delete', 'Morceau supprimé']] },
-  { group: 'Rappels', icon: 'clock', items: [['reminder', 'Rappel avant la répète'], ['dispo_reminder', 'Rappel si tu n\'as pas donné ta dispo']] },
+  { group: 'Rappels', icon: 'clock', items: [['reminder', 'Rappel avant la répète'], ['dispo_reminder', 'Rappel si tu n\'as pas répondu ou répondu « peut-être »']] },
   { group: 'Groupe', icon: 'group', items: [['group', 'Nom du groupe et membres']] },
 ];
 const TYPE_ICON = Object.fromEntries(NOTIF_TYPES.flatMap(g => g.items.map(([t]) => [t, g.icon])));
@@ -1366,11 +1408,12 @@ async function rehSnapshot(id) {
 // Notifie l'ouverture du vote, ou une répète maintenue / annulée / rétablie
 function notifyStatusChange(before, after) {
   if (!after) return;
-  const b = before ? rehState(before).s : 'normal';
+  const b = before ? rehState(before).s : null;
   const st = rehState(after), a = st.s;
   if (a === b) return;
   const when = rehWhen(after), link = '#/repete/' + after.id, abs = st.absents.join(', ');
   if (a === 'vote') notify('vote_open', 'On répète quand même ?', `Il manque ${abs} pour ${when} : le vote est ouvert.`, link, 'status:' + after.id);
+  else if (a === 'confirmee') notify('reh_status', 'On répète !', `Tout le monde est dispo : on répète ${when}${after.time ? ' à ' + after.time : ''}.`, link, 'status:' + after.id);
   else if (a === 'maintenue') notify('reh_status', 'Répète maintenue', `La répète du ${when} est maintenue${abs ? ' sans ' + abs : ''}.`, link, 'status:' + after.id);
   else if (a === 'annulee') notify('reh_status', 'Répète annulée', `La répète du ${when} est annulée (absent${st.absents.length > 1 ? 's' : ''} : ${abs}).`, link, 'status:' + after.id);
   else if (b === 'annulee') notify('reh_status', 'Répète rétablie', `La répète du ${when} n'est plus annulée.`, link, 'status:' + after.id);
@@ -1519,8 +1562,8 @@ async function renderNotifSettings() {
       ${slotsHtml('reminders')}
     </div>
     <div class="card">
-      <div style="font-weight:600;margin-bottom:4px">Rappel si tu n'as pas donné ta dispo</div>
-      <div class="muted small" style="margin-bottom:10px">Envoyé seulement si tu n'as pas encore répondu.</div>
+      <div style="font-weight:600;margin-bottom:4px">Rappel de dispo</div>
+      <div class="muted small" style="margin-bottom:10px">Envoyé seulement si tu n'as pas encore répondu, ou si tu as répondu « peut-être ».</div>
       ${slotsHtml('dispo_reminders')}
     </div>
     ${NOTIF_TYPES.map(g => `
