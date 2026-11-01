@@ -424,6 +424,33 @@ body.is-paused .eq i{animation-play-state:paused}
 .freeze-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:12px}
 .freeze-btn .ico-lock{width:16px;height:16px}
 input:disabled{opacity:.55}
+
+/* ===== Apparence « compacte » : mêmes éléments, aux mêmes places, mais en lignes comme la page Écoute ===== */
+body.look-compact .card,
+body.look-compact .audio-item,
+body.look-compact .set-item{background:transparent;border:0;border-radius:0;border-bottom:1px solid var(--border);margin:0;padding:12px 4px;box-shadow:none}
+body.look-compact :not(.card):not(.audio-item):not(.set-item) + .card,
+body.look-compact :not(.card):not(.audio-item):not(.set-item) + .audio-item,
+body.look-compact :not(.card):not(.audio-item):not(.set-item) + .set-item,
+body.look-compact .card:first-child,body.look-compact .set-item:first-child{border-top:1px solid var(--border)}
+body.look-compact .card + :not(.card):not(.audio-item):not(.set-item):not(h3):not(h2):not(details),
+body.look-compact .audio-item + :not(.audio-item),
+body.look-compact .set-item + :not(.set-item){margin-top:12px}
+body.look-compact .card .card{border:0;padding:8px 0}
+body.look-compact .card[style*="border-left"]{padding-left:14px}
+body.look-compact a.card:active,body.look-compact .song-link:active{background:rgba(255,255,255,.04)}
+body.look-compact .card .title{font-size:16px}
+body.look-compact .song-link .title{font-size:16px!important}
+body.look-compact .song-link .thumb{width:46px!important;height:46px!important}
+body.look-compact .song-link{padding:10px 4px;min-height:66px}
+body.look-compact .member-row,body.look-compact .prog-row,body.look-compact .history-item,body.look-compact .file-row{padding-left:2px;padding-right:2px}
+body.look-compact .card > .member-row:last-child,body.look-compact .card > .prog-row:last-child{border-bottom:0}
+body.look-compact .notif-list{padding:0}
+body.look-compact .notif{padding:12px 4px}
+body.look-compact .set-item textarea,body.look-compact .card textarea{background:var(--surface)}
+body.look-compact .split-list .card.sel{box-shadow:none;background:rgba(232,100,58,.09)}
+body.look-compact .frozen-banner{border-radius:0;border-left:0;border-right:0;background:transparent;padding:12px 4px}
+@media (hover: hover){ body.look-compact a.card:hover,body.look-compact .song-link:hover{background:rgba(255,255,255,.035)} }
 .w-only{display:none}
 .w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
@@ -715,7 +742,7 @@ input:disabled{opacity:.55}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 37; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 38; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -930,6 +957,15 @@ function dotsHtml(progress) {
 const state = { band: 'Mon groupe', members: [], me: null, authed: false, existingDates: new Set(), fileIndex: {} };
 const $app = document.getElementById('app');
 const APP = $app; // les pages peuvent aussi s'afficher dans une colonne (version ordinateur)
+// Apparence choisie sur cet appareil : « classique » (cartes) ou « compacte » (lignes, comme la page Écoute)
+const Look = {
+  get() { try { return localStorage.getItem('repetes_look') === 'compact' ? 'compact' : 'classic'; } catch (e) { return 'classic'; } },
+  set(v) {
+    try { localStorage.setItem('repetes_look', v); } catch (e) { /* ignoré */ }
+    document.body.classList.toggle('look-compact', v === 'compact');
+  },
+};
+document.body.classList.toggle('look-compact', Look.get() === 'compact');
 
 // ===== Utilitaires =====
 function esc(s) {
@@ -3449,6 +3485,12 @@ async function viewSettings() {
       <span>Tu es <strong>${esc(state.me)}</strong></span>
       <button class="btn-sm" data-act="changeme">Changer</button>
     </div>
+    <h3>Apparence</h3>
+    <div class="seg" id="lookSeg">
+      <button type="button" data-act="look" data-v="classic" class="${Look.get() === 'classic' ? 'on' : ''}">Classique</button>
+      <button type="button" data-act="look" data-v="compact" class="${Look.get() === 'compact' ? 'on' : ''}">Compacte</button>
+    </div>
+    <p class="muted small" style="margin:8px 0 0">Compacte : des listes à lignes, comme la page Écoute. Le choix ne vaut que pour cet appareil.</p>
     <h3>Notifications</h3>
     <div id="notifSettings"><div class="card muted small">Chargement…</div></div>
     <h3>Connexion</h3>
@@ -3731,6 +3773,10 @@ const actions = {
     await q(db.from('songs').delete().eq('id', el.dataset.id));
     go('#/morceaux');
     notify('song_delete', 'Morceau supprimé', `${state.me} a supprimé « ${song} »`, '#/morceaux');
+  },
+  look(el) {
+    Look.set(el.dataset.v);
+    document.querySelectorAll('#lookSeg [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === el.dataset.v));
   },
   async saveband() {
     const name = document.getElementById('bandInput').value.trim();
