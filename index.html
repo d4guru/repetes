@@ -265,6 +265,35 @@ body.np-open{overflow:hidden}
 .np-nudge button{flex:1;padding:4px 6px;font-size:13px}
 .np-tabs{margin:18px 0 12px}
 .np-pre{font-size:15px}
+.file-row{padding:8px 0;border-bottom:1px solid var(--border)}
+.file-row:last-of-type{border-bottom:0}
+.file-open{display:flex;align-items:center;gap:12px;min-width:0;padding:4px 0;border:0;background:transparent;text-align:left}
+.file-ico{flex:none;width:40px;height:46px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;letter-spacing:.5px}
+.file-ico.pdf{background:rgba(229,83,75,.16);color:#ef7b74}
+.file-ico.image{background:rgba(76,154,255,.16);color:#7fb6ff}
+.dv{position:fixed;inset:0;z-index:35;display:flex;flex-direction:column;background:#0c0c0e}
+.dv-top{flex:none;display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 6px) 8px 6px;border-bottom:1px solid var(--border)}
+.dv-title{flex:1;min-width:0;text-align:center;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dv-box{flex:1;overflow:auto;padding:10px 8px;-webkit-overflow-scrolling:touch}
+.dv-bottom{flex:none;display:flex;align-items:center;justify-content:space-between;padding:8px 12px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--border)}
+.doc-inner{margin:0 auto;width:max-content;min-width:100%}
+.doc-page{position:relative;margin:0 auto 10px;background:#fff;border-radius:2px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.doc-page canvas{display:block;width:100%;height:100%}
+.doc-img{display:block;margin:0 auto;background:#fff}
+pre.doc-text{margin:0;border:0;background:transparent;padding:10px 12px;white-space:pre}
+.doc-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip-btn{min-height:34px;padding:4px 12px;border-radius:99px;font-size:14px;background:var(--surface2)}
+.chip-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:650}
+.chip-btn.on .muted{color:rgba(255,255,255,.75)}
+.follow-toggle{display:flex;align-items:center;gap:10px;margin:0;color:var(--text);font-size:15px;cursor:pointer}
+.np-zoombtn{min-width:40px;font-size:18px;padding:0 10px}
+.doc-wrap{position:relative;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
+.doc-box{height:58vh;height:58dvh;overflow:auto;padding:8px 0;border-radius:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.doc-line{position:absolute;z-index:3;left:0;right:0;top:30%;height:2px;background:var(--accent);box-shadow:0 0 0 1px rgba(232,100,58,.25),0 0 10px rgba(232,100,58,.6);pointer-events:none}
+.doc-resume{position:absolute;z-index:4;left:50%;bottom:12px;transform:translateX(-50%);min-height:38px;border-radius:99px;background:var(--accent);border-color:var(--accent);color:#fff;font-weight:650;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.mark-row{padding:4px 0;border-bottom:1px solid var(--border)}
+.mark-row:last-of-type{border-bottom:0}
+.mark-go{border:0;min-height:38px;padding:4px 0;font-variant-numeric:tabular-nums;text-align:left}
 pre.mono.np-pre{font-size:13px}
 .audio-item.on{border-color:var(--accent)}
 .audio-play{flex:none;width:44px;height:44px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
@@ -381,6 +410,23 @@ body{overflow-x:clip}
       <button type="button" data-np="tab" data-v="notes">Notes</button>
     </div>
     <div id="npText"></div>
+  </div>
+</div>
+<div id="dv" class="dv hidden" role="dialog" aria-label="Tablature">
+  <div class="dv-top">
+    <button class="pl-btn" data-dv="close" aria-label="Fermer"><svg viewBox="0 0 24 24" class="np-chev"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <span class="dv-title" id="dvTitle"></span>
+    <a class="pl-btn" id="dvDownload" target="_blank" rel="noopener" download aria-label="Télécharger le fichier">
+      <svg viewBox="0 0 24 24" class="np-chev"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></a>
+  </div>
+  <div class="dv-box" id="dvBox"></div>
+  <div class="dv-bottom">
+    <span class="muted small" id="dvPage"></span>
+    <div class="row" style="gap:6px">
+      <button class="btn-sm np-zoombtn" data-dv="zoom-" aria-label="Réduire">−</button>
+      <button class="btn-sm" data-dv="fit" id="dvZoom">100 %</button>
+      <button class="btn-sm np-zoombtn" data-dv="zoom+" aria-label="Agrandir">+</button>
+    </div>
   </div>
 </div>
 <div id="sheet" class="sheet-wrap hidden">
@@ -607,7 +653,7 @@ function dotsHtml(progress) {
   }).join('')}</div>`;
 }
 
-const state = { band: 'Mon groupe', members: [], me: null, authed: false, existingDates: new Set() };
+const state = { band: 'Mon groupe', members: [], me: null, authed: false, existingDates: new Set(), fileIndex: {} };
 const $app = document.getElementById('app');
 
 // ===== Utilitaires =====
@@ -876,8 +922,8 @@ function openSongSheet() {
 
 // Fenêtre pour renommer un morceau ou un enregistrement
 function openRenameSheet(kind, id, current) {
-  const titles = { song: 'Renommer le morceau', audio: "Renommer l'enregistrement" };
-  Sheet.open(kind === 'song' ? 'renameSong' : 'renameAudio', `
+  const titles = { song: 'Renommer le morceau', audio: "Renommer l'enregistrement", file: 'Renommer la tablature' };
+  Sheet.open({ song: 'renameSong', audio: 'renameAudio', file: 'renameFile' }[kind], `
     <h2 style="margin:6px 0 14px">${titles[kind]}</h2>
     <input type="hidden" name="id" value="${esc(id)}">
     <input type="hidden" name="old" value="${esc(current)}">
@@ -1290,12 +1336,14 @@ function fieldBlock(song, field, label, cls) {
 // Construit le contenu d'une fiche de morceau (page actuelle et voisines du glisser)
 async function songHtml(id, hasPrev, hasNext) {
   const [song, hist] = await Promise.all([
-    q(db.from('songs').select('*, song_progress(member,level,note), song_audio(id,title,path,size,added_by,created_at)').eq('id', id).maybeSingle()),
+    q(db.from('songs').select('*, song_progress(member,level,note), song_audio(id,title,path,size,added_by,created_at), song_files(id,title,path,kind,size,pages,added_by,created_at)').eq('id', id).maybeSingle()),
     q(db.from('setlist_items').select('note, rehearsal_id, rehearsals(date)').eq('song_id', id)),
   ]);
   if (!song) return null;
   const audios = (song.song_audio || []).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-  const urlOf = await signedUrls([song.cover_path, ...audios.map(a => a.path)]);
+  const files = (song.song_files || []).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  const urlOf = await signedUrls([song.cover_path, ...audios.map(a => a.path), ...files.map(f => f.path)]);
+  files.forEach(f => { state.fileIndex[f.id] = { ...f, url: urlOf(f.path) }; });
   const coverUrl = urlOf(song.cover_path);
   const history = hist.filter(h => h.rehearsals).sort((a, b) => b.rehearsals.date.localeCompare(a.rehearsals.date));
   const prog = song.song_progress || [];
@@ -1384,6 +1432,27 @@ async function songHtml(id, hasPrev, hasNext) {
     </div>
 
     ${fieldBlock(song, 'tabs', 'Tabs', 'mono')}
+
+    <h3 style="margin-top:22px">Tablatures en PDF ou photo (${files.length})</h3>
+    <div class="card">
+      ${files.map(f => `
+        <div class="file-row row" style="gap:10px">
+          <button class="file-open grow" data-act="openfile" data-id="${f.id}">
+            <span class="file-ico ${f.kind}">${f.kind === 'pdf' ? 'PDF' : 'IMG'}</span>
+            <span class="grow" style="min-width:0;text-align:left">
+              <span style="display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.title || 'Sans titre')}</span>
+              <span class="muted small">${esc([f.pages ? f.pages + ' page' + (f.pages > 1 ? 's' : '') : (f.kind === 'image' ? 'Photo' : ''), f.size ? fmtSize(f.size) : '', f.added_by].filter(Boolean).join(' · '))}</span>
+            </span>
+          </button>
+          <button class="btn-sm btn-icon btn-ghost" data-act="renamefile" data-id="${f.id}" data-title="${esc(f.title || '')}" aria-label="Renommer ${esc(f.title || '')}">
+            <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
+          <button class="btn-sm btn-icon btn-ghost" data-act="delfile" data-id="${f.id}" data-path="${esc(f.path)}" data-title="${esc(f.title || '')}" aria-label="Supprimer">✕</button>
+        </div>`).join('')}
+      <input type="file" accept="application/pdf,image/*" id="tabFile" class="file-hidden" data-change="tabfile" data-song="${song.id}">
+      <label for="tabFile" class="pick" ${files.length ? 'style="margin-top:12px"' : ''}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+        Ajouter un PDF ou une photo</label>
+    </div>
     ${fieldBlock(song, 'lyrics', 'Paroles', 'lyrics')}
     ${fieldBlock(song, 'notes', 'Notes', 'lyrics')}
 
@@ -1540,6 +1609,171 @@ const Player = {
   }
 })();
 
+// ===== Tablatures en PDF ou en photo =====
+// PDF.js (Mozilla), version « legacy » compatible avec les anciens navigateurs, chargée seulement si besoin
+const PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js';
+const PDFJS_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
+let pdfjsPromise = null;
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (!pdfjsPromise) pdfjsPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = PDFJS_URL;
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; res(window.pdfjsLib); };
+    s.onerror = () => { pdfjsPromise = null; rej(new Error('Lecteur PDF indisponible')); };
+    document.head.appendChild(s);
+  });
+  return pdfjsPromise;
+}
+const pdfCache = new Map();
+async function getPdf(src) {
+  if (!pdfCache.has(src)) {
+    const p = loadPdfJs().then(lib => lib.getDocument(typeof src === 'string' ? { url: src } : { data: src }).promise);
+    pdfCache.set(src, p);
+    p.catch(() => pdfCache.delete(src));
+  }
+  return pdfCache.get(src);
+}
+function uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
+    return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+  });
+}
+
+// Affiche un document (texte, photo ou PDF) dans une boîte. La mise en page (hauteurs) est fixée
+// avant le dessin des pages, pour que les positions des repères restent stables. zoom 1 = largeur de la boîte.
+async function renderDoc(box, doc, zoom = 1) {
+  const token = (box._token = (box._token || 0) + 1);
+  box.innerHTML = '';
+  const inner = document.createElement('div');
+  inner.className = 'doc-inner';
+  box.appendChild(inner);
+  const cs = getComputedStyle(box);
+  const inside = box.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+  const width = Math.max(200, Math.floor(inside) - 2) * zoom;
+  if (doc.kind === 'text') {
+    inner.innerHTML = `<pre class="mono doc-text" style="font-size:${Math.round(13 * zoom)}px">${esc(doc.text || '')}</pre>`;
+    return;
+  }
+  if (doc.kind === 'image') {
+    inner.innerHTML = `<img class="doc-img" alt="" style="width:${width}px">`;
+    const img = inner.firstChild;
+    await new Promise(r => { img.onload = r; img.onerror = r; img.src = doc.url; });
+    return;
+  }
+  // PDF : on récupère la taille de chaque page, on réserve la place, puis on dessine
+  inner.innerHTML = '<div class="muted small" style="padding:16px">Chargement du PDF…</div>';
+  let pdf;
+  try { pdf = await getPdf(doc.url); }
+  catch (e) { inner.innerHTML = `<div class="empty">Impossible d'afficher ce PDF.<br><br><a class="btn btn-sm" href="${esc(doc.url)}" target="_blank" rel="noopener">Ouvrir le fichier</a></div>`; return; }
+  if (box._token !== token) return;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) pages.push(await pdf.getPage(i));
+  if (box._token !== token) return;
+  inner.innerHTML = '';
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const slots = pages.map(page => {
+    const vp = page.getViewport({ scale: 1 });
+    const scale = width / vp.width;
+    const div = document.createElement('div');
+    div.className = 'doc-page';
+    div.style.width = width + 'px';
+    div.style.height = Math.round(vp.height * scale) + 'px';
+    inner.appendChild(div);
+    return { page, div, scale };
+  });
+  // Dessin des pages l'une après l'autre (sans bloquer l'affichage)
+  (async () => {
+    for (const s of slots) {
+      if (box._token !== token) return;
+      const ratio = Math.min(dpr, 4096 / (s.div.clientWidth || 1));
+      const vp = s.page.getViewport({ scale: s.scale * ratio });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(vp.width); canvas.height = Math.floor(vp.height);
+      s.div.appendChild(canvas);
+      try { await s.page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise; } catch (e) {}
+    }
+  })();
+}
+// Position dans le document (0 = haut, 1 = bas), mesurée à la « ligne de lecture »
+const READ_LINE = 0.3;
+function docPos(box) { return box.scrollHeight ? Math.min(1, Math.max(0, (box.scrollTop + READ_LINE * box.clientHeight) / box.scrollHeight)) : 0; }
+function setDocPos(box, p) { box.scrollTop = p * box.scrollHeight - READ_LINE * box.clientHeight; }
+
+// ----- Visionneuse plein écran -----
+const Dv = {
+  isOpen: false, zoom: 1, doc: null,
+  el: id => document.getElementById(id),
+  open(doc) {
+    this.doc = doc; this.zoom = 1; this.isOpen = true;
+    this.el('dvTitle').textContent = doc.title || 'Tablature';
+    this.el('dvDownload').href = doc.url;
+    this.el('dv').classList.remove('hidden');
+    document.body.classList.add('np-open');
+    history.pushState({ dv: 1 }, '');
+    this.render();
+  },
+  close(fromHistory) {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    this.el('dv').classList.add('hidden');
+    if (!Np.isOpen) document.body.classList.remove('np-open');
+    this.el('dvBox').innerHTML = '';
+    if (!fromHistory) history.back();
+  },
+  async render() {
+    const box = this.el('dvBox'), p = box.scrollHeight ? box.scrollTop / box.scrollHeight : 0;
+    await renderDoc(box, this.doc, this.zoom);
+    box.scrollTop = p * box.scrollHeight;
+    this.el('dvZoom').textContent = Math.round(this.zoom * 100) + ' %';
+    this.updatePage();
+  },
+  setZoom(z) { this.zoom = Math.min(4, Math.max(1, Math.round(z * 4) / 4)); this.render(); },
+  updatePage() {
+    const box = this.el('dvBox'), pages = [...box.querySelectorAll('.doc-page')];
+    const ind = this.el('dvPage');
+    if (!pages.length) { ind.textContent = ''; return; }
+    const mid = box.scrollTop + box.clientHeight / 2;
+    let n = 1;
+    pages.forEach((pg, i) => { if (pg.offsetTop <= mid) n = i + 1; });
+    ind.textContent = `Page ${n} / ${pages.length}`;
+  },
+};
+(() => {
+  const dv = Dv.el('dv');
+  dv.addEventListener('click', e => {
+    const b = e.target.closest('[data-dv]');
+    if (!b) return;
+    const v = b.dataset.dv;
+    if (v === 'close') Dv.close();
+    else if (v === 'zoom-') Dv.setZoom(Dv.zoom - 0.25);
+    else if (v === 'zoom+') Dv.setZoom(Dv.zoom + 0.25);
+    else if (v === 'fit') Dv.setZoom(1);
+  });
+  Dv.el('dvBox').addEventListener('scroll', () => Dv.updatePage(), { passive: true });
+  window.addEventListener('popstate', () => { if (Dv.isOpen) Dv.close(true); });
+})();
+
+// ----- Envoi d'une tablature (PDF ou photo) -----
+function openUploadFileSheet(file, songId) {
+  state.pendingFile = { file, songId };
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  Sheet.open('uploadFile', `
+    <h2 style="margin:6px 0 14px">Ajouter une tablature</h2>
+    <div class="row" style="gap:10px;margin-bottom:12px">
+      <span class="file-ico ${isPdf ? 'pdf' : 'image'}">${isPdf ? 'PDF' : 'IMG'}</span>
+      <span class="grow muted small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)} · ${fmtSize(file.size)}</span>
+    </div>
+    <label style="margin-top:0">Titre</label>
+    <input type="text" name="title" required maxlength="120" autocomplete="off"
+      value="${esc(file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim())}" placeholder="ex. Guitare 1, Basse">`, `
+    <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
+    <button type="submit" class="btn-accent grow">Envoyer</button>`);
+  setTimeout(() => { const i = document.querySelector('#sheetBody input[name=title]'); if (i) { i.focus(); i.select(); } }, 250);
+}
+
 // ===== Page « En lecture » : paroles, tempo, boucle A-B =====
 const Np = {
   isOpen: false, loop: { a: null, b: null }, rate: 1, tab: null, songs: {}, raf: 0, dragging: false,
@@ -1582,26 +1816,174 @@ const Np = {
     this.el('npPrev').disabled = Player.i === 0;
     this.el('npNext').disabled = Player.i === Player.queue.length - 1;
     this.renderTempo(); this.renderLoop(); this.progress();
-    // Paroles, tabs et notes du morceau (rechargées à chaque ouverture)
+    // Paroles, tabs (texte, PDF, photos), notes et repères du morceau (rechargés à chaque ouverture)
     this.el('npText').innerHTML = '<div class="muted small" style="padding:12px 0">Chargement…</div>';
     try {
-      const s = await q(db.from('songs').select('id,title,lyrics,tabs,notes,bpm').eq('id', t.songId).maybeSingle());
+      const [s, files, marks] = await Promise.all([
+        q(db.from('songs').select('id,title,lyrics,tabs,notes,bpm').eq('id', t.songId).maybeSingle()),
+        q(db.from('song_files').select('id,title,path,kind').eq('song_id', t.songId).order('created_at')),
+        t.audioId ? q(db.from('tab_markers').select('*').eq('audio_id', t.audioId)) : Promise.resolve([]),
+      ]);
       if (s) { this.songs[t.songId] = s; t.bpm = s.bpm; }
-    } catch (e) {}
+      const urlOf = await signedUrls((files || []).map(f => f.path));
+      this.docs = [
+        ...(s && s.tabs ? [{ id: 'text', kind: 'text', title: 'Tabs (texte)', text: s.tabs }] : []),
+        ...(files || []).map(f => ({ id: f.id, kind: f.kind, title: f.title || 'Sans titre', url: urlOf(f.path) })),
+      ];
+      this.allMarkers = marks || [];
+    } catch (e) { this.docs = this.docs || []; }
     if (this.track() !== t) return;
     const s = this.songs[t.songId] || {};
-    if (!this.tab || !s[this.tab]) this.tab = s.lyrics ? 'lyrics' : s.tabs ? 'tabs' : s.notes ? 'notes' : 'lyrics';
+    const has = tab => tab === 'tabs' ? this.docs.length > 0 : !!s[tab];
+    if (!this.tab || !has(this.tab)) this.tab = this.docs.length ? 'tabs' : s.lyrics ? 'lyrics' : s.notes ? 'notes' : 'lyrics';
+    if (!this.docs.some(d => d.id === this.docId)) this.docId = this.docs[0]?.id || null;
     this.renderTempo(); this.renderText();
   },
   renderText() {
     const t = this.track(), s = (t && this.songs[t.songId]) || {};
     document.querySelectorAll('#npTabs [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === this.tab));
+    if (this.tab === 'tabs' && this.docs && this.docs.length) return this.renderTabs();
     const val = s[this.tab] || '';
     const label = { lyrics: 'de paroles', tabs: 'de tabs', notes: 'de notes' }[this.tab];
     this.el('npText').innerHTML = val
       ? `<pre class="${this.tab === 'tabs' ? 'mono' : 'lyrics'} np-pre">${esc(val)}</pre>`
       : `<div class="empty" style="padding:18px 8px">Pas encore ${label} pour ce morceau.<br><br>
            <button class="btn-sm" data-np="gosong">Ajouter depuis la fiche du morceau</button></div>`;
+  },
+
+  // ----- Tablature synchronisée -----
+  docs: [], docId: null, allMarkers: [], docZoom: 1, follow: true, followPaused: false, progScrollAt: 0,
+  doc() { return (this.docs || []).find(d => d.id === this.docId); },
+  markers() {
+    const t = this.track();
+    return this.allMarkers.filter(m => t && m.audio_id === t.audioId && m.doc === this.docId).sort((a, b) => a.t - b.t);
+  },
+  async renderTabs() {
+    const doc = this.doc(), t = this.track();
+    this.el('npText').innerHTML = `
+      ${this.docs.length > 1 ? `<div class="doc-chips">${this.docs.map(d => `
+        <button class="chip-btn ${d.id === this.docId ? 'on' : ''}" data-np="doc" data-v="${d.id}">${esc(d.title)}${d.kind !== 'text' ? ` <span class="muted">${d.kind === 'pdf' ? 'PDF' : 'photo'}</span>` : ''}</button>`).join('')}</div>` : ''}
+      <div class="row between" style="margin-bottom:8px">
+        <label class="follow-toggle"><input type="checkbox" class="switch" id="npFollow" ${this.follow ? 'checked' : ''}> Suivre la musique</label>
+        <div class="row" style="gap:6px">
+          <button class="btn-sm np-zoombtn" data-np="dzoom-" aria-label="Réduire">−</button>
+          <button class="btn-sm np-zoombtn" data-np="dzoom+" aria-label="Agrandir">+</button>
+        </div>
+      </div>
+      <div class="doc-wrap">
+        <div class="doc-box" id="npDoc"></div>
+        <div class="doc-line" title="Ligne de lecture"></div>
+        <button class="doc-resume hidden" id="npResume" data-np="resume">Reprendre le suivi</button>
+      </div>
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn-accent grow" data-np="mark" ${t && t.audioId ? '' : 'disabled'}>Placer un repère</button>
+        <button class="btn-sm" data-np="marklist" id="npMarkBtn"></button>
+      </div>
+      <div id="npMarks" class="hidden"></div>
+      <p class="muted small" id="npSyncHint" style="margin:10px 0 0"></p>`;
+    this.followPaused = false;
+    this.renderMarkers();
+    const box = this.el('npDoc');
+    // Toucher ou faire défiler la tablature met le suivi en pause
+    box.addEventListener('touchstart', () => this.pauseFollow(), { passive: true });
+    box.addEventListener('wheel', () => this.pauseFollow(), { passive: true });
+    // « Reprendre le suivi » réagit au toucher lui-même : le clic qui suit tomberait sur la tablature
+    this.el('npResume').addEventListener('touchend', e => { e.preventDefault(); this.resumeFollow(); });
+    this.el('npFollow').addEventListener('change', e => { this.follow = e.target.checked; this.followPaused = false; this.el('npResume').classList.add('hidden'); this.syncDoc(true); });
+    await renderDoc(box, doc, this.docZoom);
+    this.syncDoc(true);
+  },
+  renderMarkers() {
+    const m = this.markers(), btn = this.el('npMarkBtn');
+    if (!btn) return;
+    btn.textContent = `Repères (${m.length})`;
+    this.el('npSyncHint').textContent = m.length
+      ? `La tablature suit la musique grâce à ${m.length} repère${m.length > 1 ? 's' : ''}. Tu peux en ajouter à tout moment.`
+      : "Sans repère, la tablature défile au prorata du morceau. Pour un suivi précis : quand la musique arrive à un passage, fais défiler la tab pour placer ce passage sur la ligne orange, puis touche « Placer un repère ».";
+    this.el('npMarks').innerHTML = m.length ? `
+      <div class="card" style="margin-top:10px;padding:6px 14px">
+        ${m.map(x => `<div class="mark-row row between">
+          <button class="btn-ghost mark-go" data-np="markgo" data-id="${x.id}">${Player.fmt(x.t)},${Math.floor((x.t % 1) * 10)} <span class="muted small">· ${Math.round(x.pos * 100)} % du document</span></button>
+          <button class="btn-sm btn-icon btn-ghost" data-np="markdel" data-id="${x.id}" aria-label="Supprimer ce repère">✕</button></div>`).join('')}
+        <button class="btn-sm btn-ghost full" style="margin:6px 0" data-np="markclear">Effacer tous les repères</button>
+      </div>` : '';
+  },
+  pauseFollow() {
+    if (!this.follow) return;
+    this.followPaused = true;
+    this.el('npResume')?.classList.remove('hidden');
+  },
+  resumeFollow() {
+    this.followPaused = false;
+    this.el('npResume')?.classList.add('hidden');
+    this.syncDoc(true);
+  },
+  // Position voulue dans le document pour l'instant ct du morceau
+  targetPos(ct, box) {
+    const M = this.markers(), d = Player.audio.duration;
+    if (!M.length) {
+      if (!d || !box.scrollHeight) return null;
+      // Secours sans repère : au prorata du morceau
+      const minP = READ_LINE * box.clientHeight / box.scrollHeight, maxP = 1 - (1 - READ_LINE) * box.clientHeight / box.scrollHeight;
+      return minP + Math.max(0, maxP - minP) * Math.min(1, ct / d);
+    }
+    // Vitesse habituelle de défilement (pour les reprises et après le dernier repère)
+    const slopes = [];
+    for (let i = 0; i < M.length - 1; i++) if (M[i + 1].pos > M[i].pos && M[i + 1].t > M[i].t) slopes.push((M[i + 1].pos - M[i].pos) / (M[i + 1].t - M[i].t));
+    slopes.sort((a, b) => a - b);
+    const rate = slopes.length ? slopes[Math.floor(slopes.length / 2)] : (d ? (1 - M[0].pos) / Math.max(1, d - M[0].t) : 0);
+    if (ct <= M[0].t) return M[0].pos;
+    for (let i = 0; i < M.length - 1; i++) {
+      const a = M[i], b = M[i + 1];
+      if (ct < b.t) {
+        if (b.pos >= a.pos) return a.pos + (b.pos - a.pos) * (ct - a.t) / (b.t - a.t);
+        return Math.min(1, a.pos + rate * (ct - a.t)); // reprise : on avance, puis on remonte au repère suivant
+      }
+    }
+    const last = M[M.length - 1];
+    return Math.min(1, last.pos + rate * (ct - last.t));
+  },
+  syncDoc(force) {
+    if (!this.isOpen || this.tab !== 'tabs' || !this.follow || this.followPaused) return;
+    const box = this.el('npDoc');
+    if (!box || !box.scrollHeight) return;
+    const p = this.targetPos(Player.audio.currentTime, box);
+    if (p == null) return;
+    const top = p * box.scrollHeight - READ_LINE * box.clientHeight;
+    if (force || Math.abs(box.scrollTop - top) > 0.5) box.scrollTop = top;
+  },
+  async placeMarker() {
+    const t = this.track(), box = this.el('npDoc');
+    if (!t || !t.audioId || !box) return;
+    const ct = Player.audio.currentTime, pos = docPos(box);
+    // Un repère au même moment (à 0,3 s près) est remplacé
+    const near = this.markers().filter(m => Math.abs(m.t - ct) < 0.3);
+    if (near.length) {
+      await q(db.from('tab_markers').delete().in('id', near.map(m => m.id)));
+      this.allMarkers = this.allMarkers.filter(m => !near.includes(m));
+    }
+    const row = { id: uuid(), audio_id: t.audioId, doc: this.docId, t: ct, pos, created_by: state.me };
+    await q(db.from('tab_markers').insert(row));
+    this.allMarkers.push(row);
+    toast(`Repère placé à ${Player.fmt(ct)}`);
+    this.renderMarkers();
+    this.resumeFollow();
+    notify('song_text', 'Tablature synchronisée', `${state.me} a placé des repères de synchronisation sur « ${t.title} »`, '#/morceau/' + t.songId, 'markers:' + t.audioId);
+  },
+  async deleteMarkers(ids) {
+    if (!ids.length) return;
+    await q(db.from('tab_markers').delete().in('id', ids));
+    this.allMarkers = this.allMarkers.filter(m => !ids.includes(m.id));
+    this.renderMarkers();
+    this.syncDoc(true);
+  },
+  async setDocZoom(z) {
+    const box = this.el('npDoc');
+    if (!box) return;
+    const p = docPos(box);
+    this.docZoom = Math.min(3, Math.max(1, Math.round(z * 4) / 4));
+    await renderDoc(box, this.doc(), this.docZoom);
+    if (this.follow && !this.followPaused) this.syncDoc(true); else setDocPos(box, p);
   },
 
   // ----- Tempo (hauteur conservée) -----
@@ -1667,6 +2049,7 @@ const Np = {
     const tick = () => {
       this.checkLoop();
       if (this.isOpen && !this.dragging) this.progress();
+      this.syncDoc();
       this.raf = Player.audio.paused ? 0 : requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);
@@ -1729,6 +2112,18 @@ const Np = {
     else if (v === 'b+') Np.nudge('b', 0.5);
     else if (v === 'loopclear') Np.clearLoop();
     else if (v === 'tab') { Np.tab = b.dataset.v; Np.renderText(); }
+    else if (v === 'doc') { Np.docId = b.dataset.v; Np.renderTabs(); }
+    else if (v === 'dzoom-') Np.setDocZoom(Np.docZoom - 0.25);
+    else if (v === 'dzoom+') Np.setDocZoom(Np.docZoom + 0.25);
+    else if (v === 'resume') Np.resumeFollow();
+    else if (v === 'mark') Np.placeMarker();
+    else if (v === 'marklist') Np.el('npMarks').classList.toggle('hidden');
+    else if (v === 'markgo') {
+      const m = Np.allMarkers.find(x => x.id === b.dataset.id);
+      if (m) { a.currentTime = m.t; Np.resumeFollow(); }
+    }
+    else if (v === 'markdel') Np.deleteMarkers([b.dataset.id]);
+    else if (v === 'markclear') { if (confirm('Effacer tous les repères de cette tablature pour cet enregistrement ?')) Np.deleteMarkers(Np.markers().map(m => m.id)); }
     else if (v === 'gosong') { const id = Np.track()?.songId; Np.close(); setTimeout(() => go('#/morceau/' + id), 150); }
   });
   Np.el('npTempo').addEventListener('input', e => Np.setRate(Number(e.target.value) / 100));
@@ -1736,6 +2131,10 @@ const Np = {
   seek.addEventListener('change', () => { if (a.duration) a.currentTime = seek.value / 1000 * a.duration; Np.dragging = false; Np.progress(); });
   a.addEventListener('loadedmetadata', () => Np.renderLoop());
   ['play', 'seeked', 'ratechange'].forEach(ev => a.addEventListener(ev, () => Np.scheduleLoop()));
+  a.addEventListener('seeked', () => Np.syncDoc(true)); // on avance ou recule : la tab saute au bon endroit
+  a.addEventListener('timeupdate', () => { if (a.paused) return; if (document.hidden) Np.syncDoc(); });
+  let rz;
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Np.isOpen && Np.tab === 'tabs' && Np.el('npDoc')) Np.setDocZoom(Np.docZoom); }, 300); });
   a.addEventListener('pause', () => clearTimeout(Np.loopTimer));
   window.addEventListener('popstate', () => { if (Np.isOpen) Np.close(true); });
   // Glisser vers le bas depuis le haut de la page pour la fermer
@@ -2203,6 +2602,22 @@ const actions = {
   },
   rename(el) { openRenameSheet('song', el.dataset.id, document.getElementById('songTitle').textContent); },
   renameaudio(el) { openRenameSheet('audio', el.dataset.id, el.dataset.title); },
+  openfile(el) {
+    const f = state.fileIndex[el.dataset.id];
+    if (f) Dv.open({ id: f.id, kind: f.kind, title: f.title, url: f.url });
+  },
+  renamefile(el) { openRenameSheet('file', el.dataset.id, el.dataset.title); },
+  async delfile(el) {
+    if (!confirm(`Supprimer la tablature « ${el.dataset.title} » ? Ses repères de synchronisation seront aussi effacés.`)) return;
+    const song = document.getElementById('songTitle')?.textContent || '';
+    const songId = (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1] || '';
+    await db.storage.from(MEDIA).remove([el.dataset.path]);
+    await q(db.from('tab_markers').delete().eq('doc', el.dataset.id));
+    await q(db.from('song_files').delete().eq('id', el.dataset.id));
+    toast('Tablature supprimée');
+    route();
+    notify('song_text', 'Tablature supprimée', `${state.me} a supprimé la tablature « ${el.dataset.title} » de « ${song} »`, songId ? '#/morceau/' + songId : '#/morceaux');
+  },
   async uploadaudio(el) {
     const input = document.getElementById('audioFile');
     const file = input?.files?.[0];
@@ -2240,9 +2655,9 @@ const actions = {
   async delsong(el) {
     if (!confirm('Supprimer ce morceau ? Il sera aussi retiré des setlists, avec ses enregistrements et sa pochette.')) return;
     const song = document.getElementById('songTitle')?.textContent || '';
-    // Supprime d'abord les fichiers stockés (audio + pochette)
-    const s = await q(db.from('songs').select('cover_path, song_audio(path)').eq('id', el.dataset.id).maybeSingle());
-    const files = [s?.cover_path, ...((s?.song_audio || []).map(a => a.path))].filter(Boolean);
+    // Supprime d'abord les fichiers stockés (audio, tablatures, pochette)
+    const s = await q(db.from('songs').select('cover_path, song_audio(path), song_files(path)').eq('id', el.dataset.id).maybeSingle());
+    const files = [s?.cover_path, ...((s?.song_audio || []).map(a => a.path)), ...((s?.song_files || []).map(f => f.path))].filter(Boolean);
     if (files.length) await db.storage.from(MEDIA).remove(files);
     await q(db.from('songs').delete().eq('id', el.dataset.id));
     go('#/morceaux');
@@ -2348,6 +2763,40 @@ document.addEventListener('submit', async e => {
       const s = await q(db.from('songs').insert({ title }).select('id').single());
       afterSheet('#/morceau/' + s.id);
       notify('song_new', 'Nouveau morceau', `${state.me} a ajouté « ${title} »`, '#/morceau/' + s.id);
+    } else if (form.dataset.form === 'uploadFile') {
+      const { file, songId } = state.pendingFile || {};
+      const title = (d.title || '').trim() || 'Tablature';
+      if (!file) { Sheet.close(); return; }
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      btn.textContent = 'Envoi en cours…';
+      let blob = file, pages = null, ext = 'pdf', type = 'application/pdf';
+      if (isPdf) {
+        // Nombre de pages (si le lecteur PDF est disponible)
+        try { pages = (await getPdf(new Uint8Array(await file.arrayBuffer()))).numPages; } catch (e) {}
+      } else {
+        try { blob = await resizeImage(file, 2000); } catch (e) { toast('Cette image ne peut pas être lue'); btn.textContent = 'Envoyer'; return; }
+        ext = 'jpg'; type = 'image/jpeg';
+      }
+      const path = `tabs/${songId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error } = await db.storage.from(MEDIA).upload(path, blob, { contentType: type });
+      if (error) { toast('Erreur : ' + error.message); btn.textContent = 'Envoyer'; return; }
+      await q(db.from('song_files').insert({ id: uuid(), song_id: songId, title, path, kind: isPdf ? 'pdf' : 'image', size: blob.size, pages, added_by: state.me }));
+      state.pendingFile = null;
+      toast('Tablature ajoutée');
+      const song = document.getElementById('songTitle')?.textContent || '';
+      afterSheet(null);
+      notify('song_text', 'Nouvelle tablature', `${state.me} a ajouté la tablature « ${title} » (${isPdf ? 'PDF' : 'photo'}) à « ${song} »`, '#/morceau/' + songId, 'file:' + songId);
+    } else if (form.dataset.form === 'renameFile') {
+      const title = (d.title || '').trim();
+      if (!title) { toast('Le titre ne peut pas être vide'); return; }
+      if (title === d.old) { Sheet.close(); return; }
+      await q(db.from('song_files').update({ title }).eq('id', d.id));
+      if (state.fileIndex[d.id]) state.fileIndex[d.id].title = title;
+      toast('Tablature renommée');
+      const song = document.getElementById('songTitle')?.textContent || '';
+      const songId = (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1] || '';
+      afterSheet(null);
+      notify('song_text', 'Tablature renommée', `${state.me} a renommé une tablature de « ${song} » : « ${title} »`, songId ? '#/morceau/' + songId : '#/morceaux', 'renamefile:' + d.id);
     } else if (form.dataset.form === 'renameSong' || form.dataset.form === 'renameAudio') {
       const title = (d.title || '').trim();
       if (!title) { toast('Le titre ne peut pas être vide'); return; }
@@ -2392,6 +2841,14 @@ document.addEventListener('change', async e => {
       const song = el.closest('.set-item')?.querySelector('.title')?.textContent || '';
       const rid = currentRehId(), r = rid ? await rehSnapshot(rid) : null;
       if (el.value.trim()) notify('setlist_note', 'Note de répète', `${state.me} sur « ${song} » (${rehWhen(r)}) : ${short(el.value, 80)}`, rid ? '#/repete/' + rid : '', 'itemnote:' + el.dataset.id);
+    } else if (el.dataset.change === 'tabfile') {
+      const file = el.files?.[0];
+      el.value = '';
+      if (!file) return;
+      const ok = file.type === 'application/pdf' || /\.pdf$/i.test(file.name) || /^image\//.test(file.type);
+      if (!ok) { toast('Choisis un PDF ou une photo'); return; }
+      if (file.size > MAX_FILE) { toast(`Fichier trop lourd (${fmtSize(file.size)}). Maximum 50 Mo.`); return; }
+      openUploadFileSheet(file, el.dataset.song);
     } else if (el.dataset.change === 'bpm') {
       const raw = String(el.value).replace(',', '.').trim();
       const bpm = raw === '' ? null : Math.round(Number(raw) * 10) / 10;
