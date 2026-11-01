@@ -269,6 +269,7 @@ pre.mono.np-pre{font-size:13px}
 .audio-item.on{border-color:var(--accent)}
 .audio-play{flex:none;width:44px;height:44px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
 .audio-play svg{width:20px;height:20px;fill:currentColor}
+.ico-pen{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
 .listen-row{gap:12px;cursor:pointer}
 .listen-row.on{border-color:var(--accent);background:#25211f}
 .listen-row.on .listen-title{color:var(--accent)}
@@ -873,6 +874,20 @@ function openSongSheet() {
   setTimeout(() => document.querySelector('#sheetBody input[name=title]')?.focus(), 250);
 }
 
+// Fenêtre pour renommer un morceau ou un enregistrement
+function openRenameSheet(kind, id, current) {
+  const titles = { song: 'Renommer le morceau', audio: "Renommer l'enregistrement" };
+  Sheet.open(kind === 'song' ? 'renameSong' : 'renameAudio', `
+    <h2 style="margin:6px 0 14px">${titles[kind]}</h2>
+    <input type="hidden" name="id" value="${esc(id)}">
+    <input type="hidden" name="old" value="${esc(current)}">
+    <label style="margin-top:0">Nouveau titre</label>
+    <input type="text" name="title" required value="${esc(current)}" maxlength="120" autocomplete="off">`, `
+    <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
+    <button type="submit" class="btn-accent grow">Enregistrer</button>`);
+  setTimeout(() => { const i = document.querySelector('#sheetBody input[name=title]'); if (i) { i.focus(); i.select(); } }, 250);
+}
+
 // ===== Série de répètes =====
 function seriesDates(f) {
   const wd = Number(f.elements.weekday.value);
@@ -1324,6 +1339,8 @@ async function viewSong(id) {
           <div style="font-weight:600">${esc(a.title || 'Sans titre')}</div>
           <div class="muted small">${esc([a.added_by, fmtDate(String(a.created_at).slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }), a.size ? fmtSize(a.size) : ''].filter(Boolean).join(' · '))}</div>
         </div>
+        <button class="btn-sm btn-icon btn-ghost" data-act="renameaudio" data-id="${a.id}" data-title="${esc(a.title || '')}" aria-label="Renommer ${esc(a.title || '')}">
+          <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
         <button class="btn-sm btn-icon btn-ghost" data-act="delaudio" data-id="${a.id}" data-path="${esc(a.path)}" aria-label="Supprimer">✕</button>
       </div>`).join('')}
     <div class="card">
@@ -2160,14 +2177,8 @@ const actions = {
     const what = { tabs: ['Tabs modifiées', 'les tabs'], lyrics: ['Paroles modifiées', 'les paroles'], notes: ['Notes modifiées', 'les notes'] }[f] || ['Morceau modifié', f];
     notify('song_text', what[0], `${state.me} a modifié ${what[1]} de « ${song} »`, '#/morceau/' + el.dataset.id, `text:${el.dataset.id}:${f}`);
   },
-  async rename(el) {
-    const cur = document.getElementById('songTitle').textContent;
-    const t = prompt('Nouveau titre', cur);
-    if (!t || !t.trim() || t.trim() === cur) return;
-    await q(db.from('songs').update({ title: t.trim() }).eq('id', el.dataset.id));
-    route();
-    notify('song_text', 'Morceau renommé', `${state.me} a renommé « ${cur} » en « ${t.trim()} »`, '#/morceau/' + el.dataset.id, 'rename:' + el.dataset.id);
-  },
+  rename(el) { openRenameSheet('song', el.dataset.id, document.getElementById('songTitle').textContent); },
+  renameaudio(el) { openRenameSheet('audio', el.dataset.id, el.dataset.title); },
   async uploadaudio(el) {
     const input = document.getElementById('audioFile');
     const file = input?.files?.[0];
@@ -2313,6 +2324,28 @@ document.addEventListener('submit', async e => {
       const s = await q(db.from('songs').insert({ title }).select('id').single());
       afterSheet('#/morceau/' + s.id);
       notify('song_new', 'Nouveau morceau', `${state.me} a ajouté « ${title} »`, '#/morceau/' + s.id);
+    } else if (form.dataset.form === 'renameSong' || form.dataset.form === 'renameAudio') {
+      const title = (d.title || '').trim();
+      if (!title) { toast('Le titre ne peut pas être vide'); return; }
+      if (title === d.old) { Sheet.close(); return; }
+      const isSong = form.dataset.form === 'renameSong';
+      const songId = isSong ? d.id : (location.hash.match(/^#\/morceau\/([^/]+)/) || [])[1];
+      const song = document.getElementById('songTitle')?.textContent || '';
+      await q(db.from(isSong ? 'songs' : 'song_audio').update({ title }).eq('id', d.id));
+      // Le lecteur affiche tout de suite le nouveau titre
+      [Player.queue, state.songQueue || [], state.listenQueue || []].forEach(list => list.forEach(t => {
+        if (isSong ? t.songId === d.id : t.audioId === d.id) { if (isSong) t.title = title; else t.audioTitle = title; }
+      }));
+      const cur = Player.queue[Player.i];
+      if (cur && (isSong ? cur.songId === d.id : cur.audioId === d.id)) {
+        Player.el('plTitle').textContent = cur.title;
+        Np.updateMiniSub();
+        if (Np.isOpen) { Np.el('npTitle').textContent = cur.title; Np.el('npSub').textContent = cur.audioTitle || ''; }
+      }
+      toast(isSong ? 'Morceau renommé' : 'Enregistrement renommé');
+      afterSheet(null);
+      if (isSong) notify('song_text', 'Morceau renommé', `${state.me} a renommé « ${d.old} » en « ${title} »`, '#/morceau/' + d.id, 'rename:' + d.id);
+      else notify('audio', 'Enregistrement renommé', `${state.me} a renommé un enregistrement de « ${song} » : « ${title} »`, songId ? '#/morceau/' + songId : '#/morceaux', 'renameaudio:' + d.id);
     } else if (form.dataset.form === 'newMember') {
       const name = d.name.trim();
       if (name) {
