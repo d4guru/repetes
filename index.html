@@ -120,7 +120,7 @@ details summary{cursor:pointer;color:var(--muted);padding:10px 0;font-weight:600
 .empty{color:var(--muted);text-align:center;padding:24px 8px}
 .back{display:inline-block;color:var(--muted);margin-bottom:8px;padding:6px 0}
 .hidden{display:none!important}
-#toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:20;background:#2d2d35;color:var(--text);
+#toast{position:fixed;left:16px;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:40;background:#2d2d35;color:var(--text);
   border:1px solid var(--border);border-radius:12px;padding:12px 14px;text-align:center;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none}
 #toast.show{opacity:1;transform:none}
 .picker{max-width:420px;margin:40px auto 0;text-align:center}
@@ -227,6 +227,48 @@ label.pick svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width
 body.playing main{padding-bottom:calc(236px + env(safe-area-inset-bottom))}
 body.playing .fab{bottom:calc(158px + env(safe-area-inset-bottom))}
 body.playing #toast{bottom:calc(160px + env(safe-area-inset-bottom))}
+.player{cursor:pointer}
+.np{position:fixed;inset:0;z-index:25;display:flex;flex-direction:column;background:var(--bg);animation:sheetUp .28s cubic-bezier(.2,.8,.2,1)}
+body.np-open{overflow:hidden}
+.np-top{flex:none;display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 6px) 10px 4px}
+.np-label{font-size:13px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.np-chev{fill:none!important;stroke-width:2.2!important;width:24px!important;height:24px!important}
+.np-body{flex:1;overflow-y:auto;padding:4px 20px calc(28px + env(safe-area-inset-bottom));max-width:560px;width:100%;margin:0 auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.np-cover{width:min(62vw,260px);aspect-ratio:1;margin:6px auto 16px;border-radius:16px;overflow:hidden;background:var(--surface2);
+  display:flex;align-items:center;justify-content:center;font-size:72px;font-weight:800;color:var(--muted);box-shadow:0 12px 32px rgba(0,0,0,.5)}
+.np-cover img{width:100%;height:100%;object-fit:cover}
+.np-title{font-size:22px;font-weight:750;text-align:center}
+.np-sub{color:var(--muted);text-align:center;margin-top:2px;min-height:1.4em}
+.np-bar{position:relative;height:28px;margin-top:14px}
+.np-track{position:absolute;left:0;right:0;top:12px;height:4px;border-radius:2px;background:var(--surface2)}
+.np-loop{position:absolute;z-index:2;top:8px;height:12px;border-radius:6px;background:rgba(255,255,255,.18);border:2px solid #fff;pointer-events:none}
+.np-mark{position:absolute;z-index:2;top:5px;width:3px;height:18px;margin-left:-1px;border-radius:2px;background:#fff;pointer-events:none}
+.np-bar input[type=range]{position:absolute;inset:0;width:100%;height:28px;padding:0;margin:0;border:0;background:transparent;accent-color:var(--accent)}
+.np-times{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:2px}
+.np-ctrl{display:flex;align-items:center;justify-content:center;gap:28px;margin:8px 0 18px}
+.np-big{width:52px;height:52px}
+.np-big svg{width:26px;height:26px}
+.np-play{width:68px!important;height:68px!important}
+.np-play svg{width:30px!important;height:30px!important}
+.np-tool{margin-bottom:12px}
+.np-tool-label{font-weight:700}
+.np-range{padding:0;height:30px;border:0;background:transparent;accent-color:var(--accent)}
+.np-step{min-width:52px}
+.np-presets{gap:8px;margin-top:10px}
+.np-presets button{flex:1}
+.np-presets button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.np-ab{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.np-abbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:52px;font-variant-numeric:tabular-nums;background:var(--bg)}
+.np-abbtn.on{border-color:var(--accent);color:var(--accent)}
+.np-ab-letter{font-weight:800;font-size:18px}
+.np-nudge{gap:6px;margin-top:6px}
+.np-nudge button{flex:1;padding:4px 6px;font-size:13px}
+.np-tabs{margin:18px 0 12px}
+.np-pre{font-size:15px}
+pre.mono.np-pre{font-size:13px}
+.audio-item.on{border-color:var(--accent)}
+.audio-play{flex:none;width:44px;height:44px;min-height:0;padding:0;border-radius:50%;border:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center}
+.audio-play svg{width:20px;height:20px;fill:currentColor}
 .listen-row{gap:12px;cursor:pointer}
 .listen-row.on{border-color:var(--accent);background:#25211f}
 .listen-row.on .listen-title{color:var(--accent)}
@@ -279,6 +321,67 @@ body{overflow-x:clip}
   <button class="pl-btn" id="plNext" aria-label="Suivant"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z"/></svg></button>
 </div>
 <audio id="plAudio" preload="none"></audio>
+<div id="np" class="np hidden" role="dialog" aria-label="En lecture">
+  <div class="np-top np-drag">
+    <button class="pl-btn" data-np="close" aria-label="Fermer"><svg viewBox="0 0 24 24" class="np-chev"><path d="M6 9l6 6 6-6"/></svg></button>
+    <span class="np-label">En lecture</span>
+    <span style="width:40px"></span>
+  </div>
+  <div class="np-body" id="npBody">
+    <div class="np-cover np-drag" id="npCover"></div>
+    <div class="np-title" id="npTitle"></div>
+    <div class="np-sub" id="npSub"></div>
+    <div class="np-bar">
+      <div class="np-track"></div>
+      <div class="np-loop hidden" id="npLoop"></div>
+      <div class="np-mark hidden" id="npMarkA"></div>
+      <input type="range" id="npSeek" min="0" max="1000" value="0" aria-label="Position">
+    </div>
+    <div class="row between np-times"><span id="npTime">0:00</span><span id="npDur">0:00</span></div>
+    <div class="np-ctrl">
+      <button class="pl-btn np-big" data-np="prev" id="npPrev" aria-label="Précédent"><svg viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M19 5 9 12l10 7z"/></svg></button>
+      <button class="pl-btn pl-main np-play" data-np="play" id="npPlay" aria-label="Lecture"><svg viewBox="0 0 24 24" id="npPlayIco"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="pl-btn np-big" data-np="next" id="npNext" aria-label="Suivant"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z"/></svg></button>
+    </div>
+
+    <div class="card np-tool">
+      <div class="row between"><span class="np-tool-label">Tempo</span><span id="npTempoVal"></span></div>
+      <div class="row" style="gap:10px;margin-top:8px">
+        <button class="btn-sm np-step" data-np="tempo-" aria-label="Plus lent">−5</button>
+        <input type="range" id="npTempo" class="grow np-range" min="50" max="150" step="5" value="100" aria-label="Tempo">
+        <button class="btn-sm np-step" data-np="tempo+" aria-label="Plus rapide">+5</button>
+      </div>
+      <div class="row np-presets" id="npPresets">
+        <button class="btn-sm" data-np="rate" data-v="75">75 %</button>
+        <button class="btn-sm" data-np="rate" data-v="90">90 %</button>
+        <button class="btn-sm" data-np="rate" data-v="100">100 %</button>
+      </div>
+    </div>
+
+    <div class="card np-tool">
+      <div class="row between"><span class="np-tool-label">Boucle</span>
+        <button class="btn-sm btn-ghost hidden" data-np="loopclear" id="npLoopClear">Effacer</button></div>
+      <div class="np-ab">
+        <div class="np-abcol">
+          <button class="np-abbtn" data-np="setA" id="npA"><span class="np-ab-letter">A</span><span id="npAt">—</span></button>
+          <div class="row np-nudge"><button class="btn-sm" data-np="a-">−0,5 s</button><button class="btn-sm" data-np="a+">+0,5 s</button></div>
+        </div>
+        <div class="np-abcol">
+          <button class="np-abbtn" data-np="setB" id="npB"><span class="np-ab-letter">B</span><span id="npBt">—</span></button>
+          <div class="row np-nudge"><button class="btn-sm" data-np="b-">−0,5 s</button><button class="btn-sm" data-np="b+">+0,5 s</button></div>
+        </div>
+      </div>
+      <div class="muted small" id="npLoopHint" style="margin-top:8px"></div>
+    </div>
+
+    <div class="seg np-tabs" id="npTabs">
+      <button type="button" data-np="tab" data-v="lyrics">Paroles</button>
+      <button type="button" data-np="tab" data-v="tabs">Tabs</button>
+      <button type="button" data-np="tab" data-v="notes">Notes</button>
+    </div>
+    <div id="npText"></div>
+  </div>
+</div>
 <div id="sheet" class="sheet-wrap hidden">
   <div class="sheet-bg" data-act="closesheet"></div>
   <form id="sheetForm" class="sheet" data-form="" novalidate>
@@ -1183,6 +1286,9 @@ async function viewSong(id) {
   const myLevel = levelOf(prog, state.me);
   const myNote = prog.find(p => p.member === state.me)?.note || '';
   const status = songStatus(prog);
+  // File de lecture de ce morceau : tous ses enregistrements, le plus récent d'abord
+  state.songQueue = audios.map(a => ({ songId: song.id, audioId: a.id, title: song.title, audioTitle: a.title || 'Sans titre',
+    url: urlOf(a.path), cover: coverUrl, bpm: song.bpm }));
   $app.innerHTML = `
     <a class="back" href="#/morceaux">‹ Morceaux</a>
     <div class="row between" style="align-items:flex-start">
@@ -1202,17 +1308,23 @@ async function viewSong(id) {
     <span class="chip ${status}">${SONG_STATUS[status]}</span>
     <span class="muted small" style="margin-left:6px">calculé selon le niveau de chacun</span>
 
+    <div class="row" style="gap:10px;margin-top:14px">
+      <label for="bpmInput" style="margin:0" class="grow">Tempo d'origine</label>
+      <input id="bpmInput" type="number" inputmode="decimal" min="20" max="400" step="1" placeholder="—" value="${song.bpm ? Number(song.bpm) : ''}"
+        data-change="bpm" data-id="${song.id}" style="width:96px;text-align:right">
+      <span class="muted">BPM</span>
+    </div>
+
     <h3>Enregistrements (${audios.length})</h3>
-    ${audios.map(a => `
-      <div class="audio-item">
-        <div class="row between" style="align-items:flex-start">
-          <div class="grow">
-            <div style="font-weight:600">${esc(a.title || 'Sans titre')}</div>
-            <div class="muted small">${esc([a.added_by, fmtDate(String(a.created_at).slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }), a.size ? fmtSize(a.size) : ''].filter(Boolean).join(' · '))}</div>
-          </div>
-          <button class="btn-sm btn-icon btn-ghost" data-act="delaudio" data-id="${a.id}" data-path="${esc(a.path)}" aria-label="Supprimer">✕</button>
+    ${audios.map((a, i) => `
+      <div class="audio-item row" style="gap:12px" data-audio="${a.id}">
+        <button class="audio-play" data-act="playaudio" data-i="${i}" aria-label="Écouter ${esc(a.title || '')}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+        <div class="grow" style="min-width:0">
+          <div style="font-weight:600">${esc(a.title || 'Sans titre')}</div>
+          <div class="muted small">${esc([a.added_by, fmtDate(String(a.created_at).slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' }), a.size ? fmtSize(a.size) : ''].filter(Boolean).join(' · '))}</div>
         </div>
-        <audio controls preload="none" src="${esc(urlOf(a.path))}"></audio>
+        <button class="btn-sm btn-icon btn-ghost" data-act="delaudio" data-id="${a.id}" data-path="${esc(a.path)}" aria-label="Supprimer">✕</button>
       </div>`).join('')}
     <div class="card">
       <label style="margin-top:0">Ajouter un enregistrement (MP3 ou M4A conseillés, 50 Mo max)</label>
@@ -1264,18 +1376,19 @@ async function viewSong(id) {
 
     <button class="btn-danger full" style="margin-top:24px" data-act="delsong" data-id="${song.id}">Supprimer ce morceau</button>
   `;
+  Player.highlight();
 }
 
 // ===== Page d'écoute =====
 async function viewListen() {
-  const songs = await q(db.from('songs').select('id,title,cover_path,song_audio(id,title,path,created_at)').order('title'));
+  const songs = await q(db.from('songs').select('id,title,cover_path,bpm,song_audio(id,title,path,created_at)').order('title'));
   const withAudio = songs.filter(s => (s.song_audio || []).length)
     .sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }));
   const urlOf = await signedUrls(withAudio.flatMap(s => [s.cover_path, ...s.song_audio.map(a => a.path)]));
   // Pour chaque morceau, on joue l'enregistrement le plus récent
   state.listenQueue = withAudio.map(s => {
     const a = [...s.song_audio].sort((x, y) => (y.created_at || '').localeCompare(x.created_at || ''))[0];
-    return { songId: s.id, title: s.title, audioTitle: a.title || '', url: urlOf(a.path), cover: urlOf(s.cover_path), count: s.song_audio.length };
+    return { songId: s.id, audioId: a.id, title: s.title, audioTitle: a.title || '', url: urlOf(a.path), cover: urlOf(s.cover_path), count: s.song_audio.length, bpm: s.bpm };
   });
   $app.innerHTML = `
     <h2>Écoute</h2>
@@ -1318,6 +1431,7 @@ const Player = {
     this.el('plPrev').disabled = i === 0;
     this.el('plNext').disabled = i === this.queue.length - 1;
     this.highlight();
+    Np.onTrack(); // nouveau morceau : tempo à 100 %, boucle effacée
     if ('mediaSession' in navigator && window.MediaMetadata) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: t.title, artist: state.band, album: t.audioTitle,
@@ -1329,18 +1443,24 @@ const Player = {
   next() { if (this.i < this.queue.length - 1) this.play(this.i + 1); },
   prev() { if (this.audio.currentTime > 3) this.audio.currentTime = 0; else if (this.i > 0) this.play(this.i - 1); },
   stop() {
+    Np.close();
     this.audio.pause(); this.audio.removeAttribute('src'); this.queue = []; this.i = -1;
     this.el('player').classList.add('hidden'); document.body.classList.remove('playing'); this.highlight();
   },
   highlight() {
-    const cur = this.queue[this.i]?.songId;
-    document.querySelectorAll('.listen-row').forEach(r => r.classList.toggle('on', !!cur && r.dataset.song === cur));
+    const cur = this.queue[this.i];
+    document.querySelectorAll('.listen-row').forEach(r => r.classList.toggle('on', !!cur && r.dataset.song === cur.songId));
+    document.querySelectorAll('[data-audio]').forEach(r => r.classList.toggle('on', !!cur && r.dataset.audio === cur.audioId));
   },
   setIcon() {
-    this.el('plPlayIco').innerHTML = this.audio.paused
+    const ico = this.audio.paused
       ? '<path d="M8 5v14l11-7z"/>'
       : '<rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/>';
-    this.el('plPlay').setAttribute('aria-label', this.audio.paused ? 'Lecture' : 'Pause');
+    this.el('plPlayIco').innerHTML = ico;
+    this.el('npPlayIco').innerHTML = ico;
+    const label = this.audio.paused ? 'Lecture' : 'Pause';
+    this.el('plPlay').setAttribute('aria-label', label);
+    this.el('npPlay').setAttribute('aria-label', label);
   },
 };
 (() => {
@@ -1349,13 +1469,22 @@ const Player = {
   Player.el('plPlay').addEventListener('click', () => Player.toggle());
   Player.el('plNext').addEventListener('click', () => Player.next());
   Player.el('plPrev').addEventListener('click', () => Player.prev());
-  a.addEventListener('play', () => Player.setIcon());
+  a.addEventListener('play', () => { Player.setIcon(); Np.startTick(); });
   a.addEventListener('pause', () => Player.setIcon());
-  a.addEventListener('ended', () => { if (Player.i < Player.queue.length - 1) Player.next(); else Player.setIcon(); });
-  a.addEventListener('loadedmetadata', () => { Player.el('plDur').textContent = Player.fmt(a.duration); });
+  a.addEventListener('ended', () => {
+    if (Np.loopOn()) { a.currentTime = Np.loop.a; a.play().catch(() => {}); return; } // boucle jusqu'à la fin du morceau
+    if (Player.i < Player.queue.length - 1) Player.next(); else Player.setIcon();
+  });
+  a.addEventListener('loadedmetadata', () => { Player.el('plDur').textContent = Player.fmt(a.duration); Np.progress(); });
   a.addEventListener('timeupdate', () => {
+    Np.checkLoop(); // filet de sécurité quand l'écran est éteint
     Player.el('plTime').textContent = Player.fmt(a.currentTime);
     if (!dragging && a.duration) seek.value = Math.round(a.currentTime / a.duration * 1000);
+  });
+  // Toucher le petit lecteur (hors boutons) ouvre la page « En lecture »
+  Player.el('player').addEventListener('click', e => {
+    if (e.target.closest('.pl-btn, #plSeek')) return;
+    Np.open();
   });
   a.addEventListener('error', () => { if (a.getAttribute('src')) toast('Impossible de lire cet enregistrement'); });
   seek.addEventListener('input', () => { dragging = true; if (a.duration) Player.el('plTime').textContent = Player.fmt(seek.value / 1000 * a.duration); });
@@ -1368,6 +1497,227 @@ const Player = {
       navigator.mediaSession.setActionHandler('previoustrack', () => Player.prev());
     } catch (e) {}
   }
+})();
+
+// ===== Page « En lecture » : paroles, tempo, boucle A-B =====
+const Np = {
+  isOpen: false, loop: { a: null, b: null }, rate: 1, tab: null, songs: {}, raf: 0, dragging: false,
+  el: id => document.getElementById(id),
+  track() { return Player.queue[Player.i]; },
+  loopOn() { return this.loop.a != null && this.loop.b != null; },
+
+  open() {
+    if (!this.track()) return;
+    this.isOpen = true;
+    this.el('np').classList.remove('hidden');
+    this.el('np').style.transform = '';
+    document.body.classList.add('np-open');
+    this.el('npBody').scrollTop = 0;
+    history.pushState({ np: 1 }, '');
+    this.render();
+  },
+  // fromHistory : fermeture par le bouton retour du téléphone
+  close(fromHistory) {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    this.el('np').classList.add('hidden');
+    document.body.classList.remove('np-open');
+    if (!fromHistory) history.back();
+  },
+  // Nouveau morceau : on repart à 100 % sans boucle
+  onTrack() {
+    this.loop = { a: null, b: null };
+    this.setRate(1);
+    if (this.isOpen) this.render();
+  },
+
+  async render() {
+    const t = this.track();
+    if (!t) return;
+    this.el('npTitle').textContent = t.title;
+    this.el('npSub').textContent = t.audioTitle || '';
+    const c = this.el('npCover');
+    c.innerHTML = t.cover ? `<img src="${esc(t.cover)}" alt="">` : `<span>${esc((t.title || '?').charAt(0).toUpperCase())}</span>`;
+    this.el('npPrev').disabled = Player.i === 0;
+    this.el('npNext').disabled = Player.i === Player.queue.length - 1;
+    this.renderTempo(); this.renderLoop(); this.progress();
+    // Paroles, tabs et notes du morceau (rechargées à chaque ouverture)
+    this.el('npText').innerHTML = '<div class="muted small" style="padding:12px 0">Chargement…</div>';
+    try {
+      const s = await q(db.from('songs').select('id,title,lyrics,tabs,notes,bpm').eq('id', t.songId).maybeSingle());
+      if (s) { this.songs[t.songId] = s; t.bpm = s.bpm; }
+    } catch (e) {}
+    if (this.track() !== t) return;
+    const s = this.songs[t.songId] || {};
+    if (!this.tab || !s[this.tab]) this.tab = s.lyrics ? 'lyrics' : s.tabs ? 'tabs' : s.notes ? 'notes' : 'lyrics';
+    this.renderTempo(); this.renderText();
+  },
+  renderText() {
+    const t = this.track(), s = (t && this.songs[t.songId]) || {};
+    document.querySelectorAll('#npTabs [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === this.tab));
+    const val = s[this.tab] || '';
+    const label = { lyrics: 'de paroles', tabs: 'de tabs', notes: 'de notes' }[this.tab];
+    this.el('npText').innerHTML = val
+      ? `<pre class="${this.tab === 'tabs' ? 'mono' : 'lyrics'} np-pre">${esc(val)}</pre>`
+      : `<div class="empty" style="padding:18px 8px">Pas encore ${label} pour ce morceau.<br><br>
+           <button class="btn-sm" data-np="gosong">Ajouter depuis la fiche du morceau</button></div>`;
+  },
+
+  // ----- Tempo (hauteur conservée) -----
+  setRate(r) {
+    r = Math.min(1.5, Math.max(0.5, Math.round(r * 100) / 100));
+    this.rate = r;
+    const a = Player.audio;
+    a.preservesPitch = true; a.mozPreservesPitch = true; a.webkitPreservesPitch = true;
+    a.playbackRate = r;
+    this.renderTempo();
+  },
+  renderTempo() {
+    const t = this.track(), pct = Math.round(this.rate * 100);
+    const bpm = t && t.bpm ? Number(t.bpm) : null;
+    const fmtB = v => (Math.round(v * 10) / 10).toString().replace('.', ',');
+    this.el('npTempo').value = pct;
+    this.el('npTempoVal').innerHTML = bpm
+      ? (pct === 100 ? `<strong>${fmtB(bpm)} BPM</strong> <span class="muted">· original</span>`
+        : `<span class="muted">${fmtB(bpm)} →</span> <strong>${fmtB(bpm * this.rate)} BPM</strong> <span class="muted">· ${pct} %</span>`)
+      : `<strong>${pct} %</strong>${pct === 100 ? ' <span class="muted">· original</span>' : ''}`;
+    document.querySelectorAll('#npPresets [data-v]').forEach(b => b.classList.toggle('on', Number(b.dataset.v) === pct));
+    this.updateMiniSub();
+  },
+
+  // ----- Boucle A-B -----
+  setA() {
+    const a = Player.audio;
+    this.loop.a = a.currentTime;
+    if (this.loop.b != null && this.loop.b <= this.loop.a + 0.3) this.loop.b = null;
+    this.renderLoop();
+  },
+  setB() {
+    const a = Player.audio;
+    if (this.loop.a == null) { toast("Place d'abord le début de la boucle (A)"); return; }
+    if (a.currentTime <= this.loop.a + 0.3) { toast('La fin (B) doit être après le début (A)'); return; }
+    this.loop.b = a.currentTime;
+    a.currentTime = this.loop.a; // on repart directement au début de la boucle
+    this.renderLoop();
+  },
+  nudge(which, delta) {
+    const d = Player.audio.duration || 0, L = this.loop;
+    if (L[which] == null) return;
+    if (which === 'a') L.a = Math.max(0, Math.min(L.a + delta, L.b != null ? L.b - 0.3 : d));
+    else L.b = Math.min(d || Infinity, Math.max(L.b + delta, L.a + 0.3));
+    this.renderLoop();
+  },
+  clearLoop() { this.loop = { a: null, b: null }; this.renderLoop(); },
+  checkLoop() {
+    const a = Player.audio;
+    if (this.loopOn() && !a.paused && (a.currentTime >= this.loop.b - 0.01 || a.currentTime < this.loop.a - 0.5)) a.currentTime = this.loop.a;
+  },
+  // Minuteur calé sur la fin de la boucle (précis même si l'affichage est ralenti)
+  scheduleLoop() {
+    clearTimeout(this.loopTimer);
+    const a = Player.audio;
+    if (!this.loopOn() || a.paused) return;
+    const ms = (this.loop.b - a.currentTime) / (a.playbackRate || 1) * 1000;
+    this.loopTimer = setTimeout(() => { this.checkLoop(); this.scheduleLoop(); }, Math.max(0, ms - 4));
+  },
+  // Vérification très fréquente pendant la lecture, pour une boucle précise
+  startTick() {
+    if (this.raf) return;
+    const tick = () => {
+      this.checkLoop();
+      if (this.isOpen && !this.dragging) this.progress();
+      this.raf = Player.audio.paused ? 0 : requestAnimationFrame(tick);
+    };
+    this.raf = requestAnimationFrame(tick);
+  },
+  renderLoop() {
+    const L = this.loop, d = Player.audio.duration;
+    const fmt = v => v == null ? '—' : Player.fmt(v) + ',' + Math.floor((v % 1) * 10);
+    this.el('npAt').textContent = fmt(L.a);
+    this.el('npBt').textContent = fmt(L.b);
+    this.el('npA').classList.toggle('on', L.a != null);
+    this.el('npB').classList.toggle('on', L.b != null);
+    document.querySelectorAll('[data-np="a-"],[data-np="a+"]').forEach(b => { b.disabled = L.a == null; });
+    document.querySelectorAll('[data-np="b-"],[data-np="b+"]').forEach(b => { b.disabled = L.b == null; });
+    this.el('npLoopClear').classList.toggle('hidden', L.a == null);
+    this.el('npLoopHint').textContent = this.loopOn() ? 'Le passage entre A et B se répète. Ajuste avec ±0,5 s.'
+      : L.a != null ? 'Touche B à la fin du passage.' : 'Touche A au début du passage, puis B à la fin.';
+    const seg = this.el('npLoop'), mark = this.el('npMarkA');
+    if (d && L.a != null) {
+      mark.style.left = (L.a / d * 100) + '%';
+      mark.classList.remove('hidden');
+      if (L.b != null) { seg.style.left = (L.a / d * 100) + '%'; seg.style.width = ((L.b - L.a) / d * 100) + '%'; seg.classList.remove('hidden'); }
+      else seg.classList.add('hidden');
+    } else { seg.classList.add('hidden'); mark.classList.add('hidden'); }
+    this.updateMiniSub();
+    this.scheduleLoop();
+  },
+  // Rappel discret dans le petit lecteur : tempo et boucle actifs
+  updateMiniSub() {
+    const t = this.track();
+    if (!t) return;
+    const extra = [this.rate !== 1 ? Math.round(this.rate * 100) + ' %' : '', this.loopOn() ? 'boucle A-B' : ''].filter(Boolean).join(' · ');
+    Player.el('plSub').textContent = [t.audioTitle, extra].filter(Boolean).join(' · ');
+  },
+  progress() {
+    const a = Player.audio;
+    if (!this.isOpen) return;
+    this.el('npTime').textContent = Player.fmt(a.currentTime);
+    this.el('npDur').textContent = Player.fmt(a.duration);
+    if (!this.dragging && a.duration) this.el('npSeek').value = Math.round(a.currentTime / a.duration * 1000);
+  },
+};
+(() => {
+  const np = Np.el('np'), seek = Np.el('npSeek'), a = Player.audio;
+  np.addEventListener('click', e => {
+    const b = e.target.closest('[data-np]');
+    if (!b || b.disabled) return;
+    const v = b.dataset.np;
+    if (v === 'close') Np.close();
+    else if (v === 'play') Player.toggle();
+    else if (v === 'prev') Player.prev();
+    else if (v === 'next') Player.next();
+    else if (v === 'tempo-') Np.setRate(Np.rate - 0.05);
+    else if (v === 'tempo+') Np.setRate(Np.rate + 0.05);
+    else if (v === 'rate') Np.setRate(Number(b.dataset.v) / 100);
+    else if (v === 'setA') Np.setA();
+    else if (v === 'setB') Np.setB();
+    else if (v === 'a-') Np.nudge('a', -0.5);
+    else if (v === 'a+') Np.nudge('a', 0.5);
+    else if (v === 'b-') Np.nudge('b', -0.5);
+    else if (v === 'b+') Np.nudge('b', 0.5);
+    else if (v === 'loopclear') Np.clearLoop();
+    else if (v === 'tab') { Np.tab = b.dataset.v; Np.renderText(); }
+    else if (v === 'gosong') { const id = Np.track()?.songId; Np.close(); setTimeout(() => go('#/morceau/' + id), 150); }
+  });
+  Np.el('npTempo').addEventListener('input', e => Np.setRate(Number(e.target.value) / 100));
+  seek.addEventListener('input', () => { Np.dragging = true; if (a.duration) Np.el('npTime').textContent = Player.fmt(seek.value / 1000 * a.duration); });
+  seek.addEventListener('change', () => { if (a.duration) a.currentTime = seek.value / 1000 * a.duration; Np.dragging = false; Np.progress(); });
+  a.addEventListener('loadedmetadata', () => Np.renderLoop());
+  ['play', 'seeked', 'ratechange'].forEach(ev => a.addEventListener(ev, () => Np.scheduleLoop()));
+  a.addEventListener('pause', () => clearTimeout(Np.loopTimer));
+  window.addEventListener('popstate', () => { if (Np.isOpen) Np.close(true); });
+  // Glisser vers le bas depuis le haut de la page pour la fermer
+  let g = null;
+  np.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || !e.target.closest('.np-drag') || Np.el('npBody').scrollTop > 0) { g = null; return; }
+    g = { y0: e.touches[0].clientY, x0: e.touches[0].clientX, dy: 0 };
+  }, { passive: true });
+  np.addEventListener('touchmove', e => {
+    if (!g) return;
+    const dy = e.touches[0].clientY - g.y0, dx = e.touches[0].clientX - g.x0;
+    if (Math.abs(dx) > Math.abs(dy) && g.dy === 0) { g = null; return; }
+    g.dy = Math.max(0, dy);
+    np.style.transition = 'none';
+    np.style.transform = `translateY(${g.dy}px)`;
+  }, { passive: true });
+  np.addEventListener('touchend', () => {
+    if (!g) return;
+    np.style.transition = 'transform .22s ease-out';
+    if (g.dy > 110) { np.style.transform = 'translateY(100%)'; setTimeout(() => Np.close(), 200); }
+    else np.style.transform = '';
+    g = null;
+  }, { passive: true });
 })();
 
 // ===== Notifications =====
@@ -1760,6 +2110,13 @@ const actions = {
     notifyStatusChange(before, after);
   },
   playat(el) { Player.start(state.listenQueue || [], Number(el.dataset.i)); },
+  playaudio(el) {
+    const i = Number(el.dataset.i), q0 = state.songQueue || [];
+    const cur = Player.queue[Player.i];
+    // Toucher l'enregistrement déjà en cours : pause / reprise
+    if (cur && q0[i] && cur.audioId === q0[i].audioId) { Player.toggle(); return; }
+    Player.start(q0, i);
+  },
   rehmode(el) {
     const f = document.getElementById('sheetForm');
     const series = el.dataset.mode === 'series';
@@ -1978,6 +2335,18 @@ document.addEventListener('change', async e => {
       const song = el.closest('.set-item')?.querySelector('.title')?.textContent || '';
       const rid = currentRehId(), r = rid ? await rehSnapshot(rid) : null;
       if (el.value.trim()) notify('setlist_note', 'Note de répète', `${state.me} sur « ${song} » (${rehWhen(r)}) : ${short(el.value, 80)}`, rid ? '#/repete/' + rid : '', 'itemnote:' + el.dataset.id);
+    } else if (el.dataset.change === 'bpm') {
+      const raw = String(el.value).replace(',', '.').trim();
+      const bpm = raw === '' ? null : Math.round(Number(raw) * 10) / 10;
+      if (bpm !== null && (!isFinite(bpm) || bpm < 20 || bpm > 400)) { toast('Indique un tempo entre 20 et 400 BPM'); return; }
+      await q(db.from('songs').update({ bpm }).eq('id', el.dataset.id));
+      toast(bpm ? `Tempo enregistré : ${String(bpm).replace('.', ',')} BPM` : 'Tempo retiré');
+      // Met à jour le lecteur si ce morceau est en cours
+      Player.queue.forEach(t => { if (t.songId === el.dataset.id) t.bpm = bpm; });
+      (state.songQueue || []).forEach(t => { t.bpm = bpm; });
+      Np.renderTempo();
+      const song = document.getElementById('songTitle')?.textContent || '';
+      if (bpm) notify('song_text', 'Tempo du morceau', `${state.me} a indiqué le tempo de « ${song} » : ${String(bpm).replace('.', ',')} BPM`, '#/morceau/' + el.dataset.id, 'bpm:' + el.dataset.id);
     } else if (el.dataset.change === 'ntype') {
       const t = el.value, set = new Set(state.prefs.disabled_types);
       if (el.checked) set.delete(t); else set.add(t);
