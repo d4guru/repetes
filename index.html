@@ -1035,7 +1035,7 @@ const Swipe = { g: null, lastSwipe: 0 };
 document.addEventListener('touchstart', e => {
   const vp = e.target.closest('.swipe-vp');
   // Pas de glisser si le doigt part de la poignée ☰, d'un champ ou pendant une animation
-  if (!vp || e.touches.length !== 1 || vp.dataset.busy || e.target.closest('.drag-handle, input, textarea, select, audio')) { Swipe.g = null; return; }
+  if (!vp || e.touches.length !== 1 || vp.dataset.busy || e.target.closest('.drag-handle, input, textarea, select, audio, pre.mono')) { Swipe.g = null; return; }
   const t = e.touches[0];
   Swipe.g = { vp, track: vp.querySelector('.swipe-track'), x0: t.clientX, y0: t.clientY, dx: 0, mode: null,
     w: vp.querySelector('.pane-cur').offsetWidth + SWIPE_GAP, pts: [{ x: t.clientX, t: performance.now() }] };
@@ -1091,7 +1091,7 @@ function endSwipe() {
     // La page voisine est maintenant affichée : on remonte en haut (sans saut visible) et on charge la vraie page
     if (g.shift) { g.vp.querySelectorAll('.pane-side').forEach(p => { p.style.transform = ''; }); window.scrollTo(0, 0); }
     state.calDir = null;
-    go(g.vp.dataset.kind === 'cal' ? '#/calendrier/' + target : '#/repete/' + target);
+    go({ cal: '#/calendrier/', reh: '#/repete/', song: '#/morceau/' }[g.vp.dataset.kind] + target);
   }, 290);
 }
 document.addEventListener('touchend', endSwipe, { passive: true });
@@ -1287,12 +1287,13 @@ function fieldBlock(song, field, label, cls) {
       </div>
     </div>`;
 }
-async function viewSong(id) {
+// Construit le contenu d'une fiche de morceau (page actuelle et voisines du glisser)
+async function songHtml(id, hasPrev, hasNext) {
   const [song, hist] = await Promise.all([
     q(db.from('songs').select('*, song_progress(member,level,note), song_audio(id,title,path,size,added_by,created_at)').eq('id', id).maybeSingle()),
     q(db.from('setlist_items').select('note, rehearsal_id, rehearsals(date)').eq('song_id', id)),
   ]);
-  if (!song) { $app.innerHTML = `<div class="empty">Ce morceau n'existe plus.<br><br><a class="btn" href="#/morceaux">Retour</a></div>`; return; }
+  if (!song) return null;
   const audios = (song.song_audio || []).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   const urlOf = await signedUrls([song.cover_path, ...audios.map(a => a.path)]);
   const coverUrl = urlOf(song.cover_path);
@@ -1302,15 +1303,18 @@ async function viewSong(id) {
   const myNote = prog.find(p => p.member === state.me)?.note || '';
   const status = songStatus(prog);
   // File de lecture de ce morceau : tous ses enregistrements, le plus récent d'abord
-  state.songQueue = audios.map(a => ({ songId: song.id, audioId: a.id, title: song.title, audioTitle: a.title || 'Sans titre',
+  const queue = audios.map(a => ({ songId: song.id, audioId: a.id, title: song.title, audioTitle: a.title || 'Sans titre',
     url: urlOf(a.path), cover: coverUrl, bpm: song.bpm }));
-  $app.innerHTML = `
+  const html = `
     <a class="back" href="#/morceaux">‹ Morceaux</a>
     <div class="row between" style="align-items:center;margin:4px 0 14px">
       <h2 class="grow" id="songTitle" style="margin:0">${esc(song.title)}</h2>
       <button class="btn-sm btn-icon btn-ghost" data-act="rename" data-id="${song.id}" aria-label="Renommer le morceau">
         <svg viewBox="0 0 24 24" class="ico-pen" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
     </div>
+    <p class="muted small" style="margin:-8px 0 14px">
+      <span style="opacity:${hasPrev ? 1 : .25}">‹</span> glisse pour changer de morceau <span style="opacity:${hasNext ? 1 : .25}">›</span>
+    </p>
 
     <input type="file" accept="image/*" id="coverInput" class="file-hidden" data-change="cover" data-id="${song.id}" data-old="${esc(song.cover_path || '')}">
     ${coverUrl ? `
@@ -1394,6 +1398,25 @@ async function viewSong(id) {
 
     <button class="btn-danger full" style="margin-top:24px" data-act="delsong" data-id="${song.id}">Supprimer ce morceau</button>
   `;
+  return { html, queue };
+}
+
+// Ordre de navigation = ordre de l'onglet Morceaux (En cours, À apprendre, Prêt, puis titre)
+async function viewSong(id) {
+  const list = await q(db.from('songs').select('id,title,song_progress(member,level)').order('title'));
+  const ordered = ['en-cours', 'a-apprendre', 'pret'].flatMap(g => list.filter(s => songStatus(s.song_progress) === g));
+  const idx = ordered.findIndex(s => s.id === id);
+  const prevId = idx > 0 ? ordered[idx - 1].id : '';
+  const nextId = idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1].id : '';
+  const [cur, prev, next] = await Promise.all([
+    songHtml(id, !!prevId, !!nextId),
+    prevId ? songHtml(prevId, idx - 1 > 0, true) : null,
+    nextId ? songHtml(nextId, true, idx + 1 < ordered.length - 1) : null,
+  ]);
+  if (!cur) { $app.innerHTML = `<div class="empty">Ce morceau n'existe plus.<br><br><a class="btn" href="#/morceaux">Retour</a></div>`; return; }
+  state.songQueue = cur.queue;
+  $app.innerHTML = swipeFrame('song', prev ? prevId : '', next ? nextId : '', prev?.html, cur.html, next?.html);
+  neutralizeSides(); // les voisines ne gardent aucun identifiant ni action
   Player.highlight();
 }
 
