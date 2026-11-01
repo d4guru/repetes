@@ -301,8 +301,18 @@ pre.doc-text{margin:0;border:0;background:transparent;padding:10px 12px;white-sp
 .mk-hint{flex:none;padding:0 14px 8px;font-size:13px;color:var(--maybe)}
 .mk-box{flex:1;position:relative;overflow:auto;padding:8px 8px 8px 44px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
 .mk-mark{position:absolute;left:0;right:0;height:0;border-top:2px dashed var(--accent);z-index:2;display:flex;align-items:center;gap:6px;pointer-events:none}
-.mk-tag{pointer-events:auto;cursor:pointer;transform:translateY(-50%);margin-left:2px;padding:2px 5px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+.mk-tag{pointer-events:auto;cursor:pointer;transform:translateY(-50%);margin-left:2px;padding:4px 6px;border-radius:6px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .mk-mark.sel .mk-tag{box-shadow:0 0 0 3px rgba(232,100,58,.4)}
+.mk-mark.drag{border-top-style:solid;z-index:4}
+.mk-mark.drag .mk-tag{transform:translateY(-50%) scale(1.3);box-shadow:0 4px 14px rgba(0,0,0,.6)}
+.fs{z-index:37}
+.fs-top{flex:none;display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 4px) 8px 4px}
+.fs-title{flex:1;min-width:0;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fs-wrap{flex:1;position:relative;min-height:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.fs-box{position:absolute;inset:0;overflow:auto;padding:4px 0;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.fs-bar{padding-top:2px}
+.fs-bar .np-bar{margin-top:0}
+.fs-info{font-variant-numeric:tabular-nums;margin-bottom:4px}
 .mk-act{pointer-events:auto;transform:translateY(-50%);min-height:30px;padding:2px 10px;font-size:13px;background:#26262d;border-color:var(--accent)}
 .mk-flash{position:absolute;left:0;right:0;height:0;border-top:3px solid #fff;z-index:3;pointer-events:none;animation:mkFlash .6s ease-out forwards}
 @keyframes mkFlash{from{opacity:1}to{opacity:0}}
@@ -456,7 +466,7 @@ body{overflow-x:clip}
     </div>
     <button class="btn-accent btn-sm" data-mk="done">Terminé</button>
   </div>
-  <div class="mk-hint">Pendant la lecture, touche la tab à l'endroit que tu entends. Glisse pour faire défiler.</div>
+  <div class="mk-hint">Pendant la lecture, touche la tab à l'endroit que tu entends. Glisse pour faire défiler. Garde le doigt sur un repère pour le déplacer.</div>
   <div class="mk-box" id="mkBox"></div>
   <div class="mk-bar">
     <div class="row between" style="margin-bottom:8px">
@@ -468,6 +478,31 @@ body{overflow-x:clip}
       <button class="pl-btn mk-skip" data-mk="back" aria-label="Reculer de 5 secondes">−5 s</button>
       <button class="pl-btn pl-main mk-play" data-mk="play" id="mkPlay" aria-label="Lecture"><svg viewBox="0 0 24 24" id="mkPlayIco"><path d="M8 5v14l11-7z"/></svg></button>
       <button class="pl-btn mk-skip" data-mk="fwd" aria-label="Avancer de 5 secondes">+5 s</button>
+    </div>
+  </div>
+</div>
+<div id="fs" class="mk fs hidden" role="dialog" aria-label="Tablature en plein écran">
+  <div class="fs-top">
+    <button class="pl-btn" data-fs="close" aria-label="Quitter le plein écran"><svg viewBox="0 0 24 24" class="np-chev"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <div class="fs-title" id="fsTitle"></div>
+    <button class="btn-sm np-zoombtn" data-fs="zoom-" aria-label="Réduire">−</button>
+    <button class="btn-sm np-zoombtn" data-fs="zoom+" aria-label="Agrandir">+</button>
+  </div>
+  <div class="fs-wrap">
+    <div class="fs-box" id="fsBox"></div>
+    <div class="doc-line"></div>
+    <button class="doc-resume hidden" id="fsResume">Reprendre le suivi</button>
+  </div>
+  <div class="mk-bar fs-bar">
+    <div class="np-bar">
+      <div class="np-track"></div>
+      <input type="range" id="fsSeek" min="0" max="1000" value="0" aria-label="Position">
+    </div>
+    <div class="row between muted small fs-info"><span id="fsTime">0:00 / 0:00</span><span id="fsExtra"></span></div>
+    <div class="mk-ctrl" style="justify-content:center;gap:28px">
+      <button class="pl-btn mk-skip" data-fs="back" aria-label="Reculer de 5 secondes">−5 s</button>
+      <button class="pl-btn pl-main mk-play" data-fs="play" id="fsPlay" aria-label="Lecture"><svg viewBox="0 0 24 24" id="fsPlayIco"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="pl-btn mk-skip" data-fs="fwd" aria-label="Avancer de 5 secondes">+5 s</button>
     </div>
   </div>
 </div>
@@ -880,7 +915,7 @@ const Layers = {
 window.addEventListener('popstate', () => {
   if (Layers.ignore > 0) { Layers.ignore--; return; }
   const top = Layers.stack[Layers.stack.length - 1];
-  const obj = { sheet: Sheet, np: Np, dv: Dv, mk: Mk }[top];
+  const obj = { sheet: Sheet, np: Np, dv: Dv, mk: Mk, fs: Fs }[top];
   if (obj && obj.isOpen) obj.close(true);
   else if (top) Layers.stack.pop();
 });
@@ -1631,10 +1666,12 @@ const Player = {
     this.el('plPlayIco').innerHTML = ico;
     this.el('npPlayIco').innerHTML = ico;
     this.el('mkPlayIco').innerHTML = ico;
+    this.el('fsPlayIco').innerHTML = ico;
     const label = this.audio.paused ? 'Lecture' : 'Pause';
     this.el('plPlay').setAttribute('aria-label', label);
     this.el('npPlay').setAttribute('aria-label', label);
     this.el('mkPlay').setAttribute('aria-label', label);
+    this.el('fsPlay').setAttribute('aria-label', label);
   },
 };
 (() => {
@@ -1906,6 +1943,42 @@ const Mk = {
     box.appendChild(f); setTimeout(() => f.remove(), 600);
     toast(`Repère à ${Player.fmt(ct)}`);
   },
+  // ----- Déplacement d'un repère (doigt gardé dessus) -----
+  startDrag(d) {
+    const box = this.el('mkBox');
+    d.drag = true;
+    if (this.sel) { this.sel = null; this.renderMarks(); }
+    d.el = box.querySelector(`.mk-mark[data-id="${d.mark}"]`);
+    if (!d.el) { d.drag = false; return; }
+    d.el.classList.add('drag');
+    try { navigator.vibrate && navigator.vibrate(15); } catch (e) { /* ignoré */ }
+    this.dragTo(d.lastY);
+    // Défilement automatique quand le doigt approche du haut ou du bas
+    const edge = () => {
+      if (this.down !== d || !d.drag) return;
+      const r = box.getBoundingClientRect(), zone = 56;
+      let v = 0;
+      if (d.lastY < r.top + zone) v = -Math.ceil((r.top + zone - d.lastY) / 4);
+      else if (d.lastY > r.bottom - zone) v = Math.ceil((d.lastY - (r.bottom - zone)) / 4);
+      if (v) { box.scrollTop += v; this.dragTo(d.lastY); }
+      requestAnimationFrame(edge);
+    };
+    requestAnimationFrame(edge);
+  },
+  dragTo(clientY) {
+    const d = this.down, box = this.el('mkBox');
+    if (!d || !d.el) return;
+    const y = Math.min(box.scrollHeight, Math.max(0, clientY - box.getBoundingClientRect().top - box.clientTop + box.scrollTop));
+    d.el.style.top = y + 'px';
+    d.newY = y;
+  },
+  async drop(d) {
+    const box = this.el('mkBox');
+    if (d.newY == null || !box.scrollHeight) { this.renderMarks(); return; }
+    await Np.moveMarker(d.mark, d.newY / box.scrollHeight);
+    this.renderMarks();
+    toast('Repère déplacé');
+  },
   async undo() {
     const id = this.placed.pop();
     if (!id) return;
@@ -1929,13 +2002,31 @@ const Mk = {
     else if (v === 'del') { Mk.placed = Mk.placed.filter(id => id !== b.dataset.id); await Np.deleteMarkers([b.dataset.id]); Mk.sel = null; Mk.renderMarks(); }
   });
   // Toucher bref sur la tab = repère ; glisser = défilement ; toucher une marque = la sélectionner
+  // Doigt gardé sur un repère (≈ 0,45 s) = on le déplace
   box.addEventListener('pointerdown', e => {
     if (e.target.closest('.mk-act')) { Mk.down = null; return; }
-    Mk.down = { x: e.clientX, y: e.clientY, t: Date.now(), mark: e.target.closest('.mk-mark')?.dataset.id || null };
+    const d = Mk.down = { x: e.clientX, y: e.clientY, lastY: e.clientY, t: Date.now(), mark: e.target.closest('.mk-mark')?.dataset.id || null, drag: false };
+    if (d.mark) {
+      try { box.setPointerCapture(e.pointerId); } catch (err) { /* ignoré */ }
+      d.timer = setTimeout(() => { if (Mk.down === d) Mk.startDrag(d); }, 450);
+    }
   });
-  box.addEventListener('pointercancel', () => { Mk.down = null; });
+  box.addEventListener('pointermove', e => {
+    const d = Mk.down;
+    if (!d || !d.mark) return;
+    d.lastY = e.clientY;
+    if (d.drag) Mk.dragTo(e.clientY);
+    else if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10) { clearTimeout(d.timer); Mk.down = null; }
+  });
+  box.addEventListener('contextmenu', e => { if (e.target.closest('.mk-mark')) e.preventDefault(); });
+  box.addEventListener('pointercancel', () => {
+    const d = Mk.down; Mk.down = null;
+    if (d) { clearTimeout(d.timer); if (d.drag) Mk.renderMarks(); }
+  });
   box.addEventListener('pointerup', e => {
     const d = Mk.down; Mk.down = null;
+    if (d) clearTimeout(d.timer);
+    if (d && d.drag) { Mk.drop(d); return; }
     if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10 || Date.now() - d.t > 600) return;
     if (d.mark) { Mk.sel = Mk.sel === d.mark ? null : d.mark; Mk.renderMarks(); return; }
     if (Mk.sel) { Mk.sel = null; Mk.renderMarks(); return; } // un toucher ailleurs ferme la sélection
@@ -1946,6 +2037,84 @@ const Mk = {
 })();
 
 // ===== Page « En lecture » : paroles, tempo, boucle A-B =====
+// ===== Tablature en plein écran, avec petit lecteur en bas =====
+const Fs = {
+  isOpen: false, dirty: false, wl: null, dragging: false,
+  el: id => document.getElementById(id),
+  async open() {
+    const doc = Np.doc();
+    if (!doc || this.isOpen) return;
+    const npBox = Np.el('npDoc'), p = npBox ? docPos(npBox) : 0;
+    this.isOpen = true; this.dirty = false;
+    this.el('fsTitle').textContent = doc.title;
+    this.el('fs').classList.remove('hidden');
+    Layers.push('fs');
+    Np.followPaused = false;
+    this.el('fsResume').classList.add('hidden');
+    this.lock();
+    this.progress();
+    const box = this.el('fsBox');
+    await renderDoc(box, doc, Np.docZoom);
+    if (!this.isOpen) return;
+    setDocPos(box, p);
+    Np.syncDoc(true);
+  },
+  close(fromHistory) {
+    if (!this.isOpen) return;
+    const box = this.el('fsBox'), p = docPos(box);
+    this.isOpen = false;
+    this.el('fs').classList.add('hidden');
+    box.innerHTML = '';
+    this.unlock();
+    Layers.closed('fs', fromHistory);
+    const npBox = Np.el('npDoc');
+    if (!npBox) return;
+    const after = () => { if (Np.follow) Np.resumeFollow(); else { Np.followPaused = false; setDocPos(npBox, p); } };
+    if (this.dirty) Np.setDocZoom(Np.docZoom).then(after); else after();
+  },
+  // L'écran reste allumé tant que le plein écran est ouvert
+  async lock() {
+    try { if ('wakeLock' in navigator && !document.hidden) this.wl = await navigator.wakeLock.request('screen'); } catch (e) { this.wl = null; }
+  },
+  unlock() {
+    try { if (this.wl) this.wl.release(); } catch (e) { /* ignoré */ }
+    this.wl = null;
+  },
+  progress() {
+    if (!this.isOpen) return;
+    const a = Player.audio;
+    this.el('fsTime').textContent = `${Player.fmt(a.currentTime)} / ${Player.fmt(a.duration)}`;
+    if (!this.dragging && a.duration) this.el('fsSeek').value = Math.round(a.currentTime / a.duration * 1000);
+    const extra = [Np.rate !== 1 ? `Tempo ${Math.round(Np.rate * 100)} %` : '', Np.loopOn() ? 'Boucle A-B' : ''].filter(Boolean).join(' · ');
+    const ex = this.el('fsExtra');
+    if (ex.textContent !== extra) ex.textContent = extra;
+  },
+};
+(() => {
+  const fs = Fs.el('fs'), box = Fs.el('fsBox'), seek = Fs.el('fsSeek'), a = Player.audio;
+  fs.addEventListener('click', e => {
+    const b = e.target.closest('[data-fs]');
+    if (!b || b.disabled) return;
+    const v = b.dataset.fs;
+    if (v === 'close') Fs.close();
+    else if (v === 'play') Player.toggle();
+    else if (v === 'back') a.currentTime = Math.max(0, a.currentTime - 5);
+    else if (v === 'fwd') a.currentTime = Math.min(a.duration || 0, a.currentTime + 5);
+    else if (v === 'zoom-') Np.setDocZoom(Np.docZoom - 0.25);
+    else if (v === 'zoom+') Np.setDocZoom(Np.docZoom + 0.25);
+  });
+  // Toucher la tablature met le suivi en pause ; « Reprendre le suivi » réagit au toucher lui-même
+  box.addEventListener('touchstart', () => Np.pauseFollow(), { passive: true });
+  box.addEventListener('wheel', () => Np.pauseFollow(), { passive: true });
+  const resume = Fs.el('fsResume');
+  resume.addEventListener('touchend', e => { e.preventDefault(); Np.resumeFollow(); });
+  resume.addEventListener('click', () => Np.resumeFollow());
+  seek.addEventListener('input', () => { Fs.dragging = true; if (a.duration) Fs.el('fsTime').textContent = `${Player.fmt(seek.value / 1000 * a.duration)} / ${Player.fmt(a.duration)}`; });
+  seek.addEventListener('change', () => { if (a.duration) a.currentTime = seek.value / 1000 * a.duration; Fs.dragging = false; Fs.progress(); });
+  ['timeupdate', 'loadedmetadata', 'ratechange', 'seeked'].forEach(ev => a.addEventListener(ev, () => Fs.progress()));
+  document.addEventListener('visibilitychange', () => { if (Fs.isOpen && !document.hidden) Fs.lock(); });
+})();
+
 const Np = {
   isOpen: false, loop: { a: null, b: null }, rate: 1, tab: null, songs: {}, raf: 0, dragging: false,
   el: id => document.getElementById(id),
@@ -1972,6 +2141,7 @@ const Np = {
   },
   // Nouveau morceau : on repart à 100 % sans boucle
   onTrack() {
+    if (Fs.isOpen) Fs.close(); // autre morceau : autre tablature
     this.loop = { a: null, b: null };
     this.setRate(1);
     if (this.isOpen) this.render();
@@ -2046,7 +2216,8 @@ const Np = {
         <div class="doc-line" title="Ligne de lecture"></div>
         <button class="doc-resume hidden" id="npResume" data-np="resume">Reprendre le suivi</button>
       </div>
-      <div class="row" style="gap:8px;margin-top:10px">
+      <button class="btn-sm full" style="margin-top:10px" data-np="fullscreen">Plein écran</button>
+      <div class="row" style="gap:8px;margin-top:8px">
         <button class="btn-accent grow" data-np="markmode" ${t && t.audioId ? '' : 'disabled'}>Placer des repères</button>
         <button class="btn-sm" data-np="marklist" id="npMarkBtn"></button>
       </div>
@@ -2079,14 +2250,18 @@ const Np = {
         <button class="btn-sm btn-ghost full" style="margin:6px 0" data-np="markclear">Effacer tous les repères</button>
       </div>` : '';
   },
+  // La tablature affichée : celle du plein écran s'il est ouvert
+  box() { return Fs.isOpen ? Fs.el('fsBox') : this.el('npDoc'); },
+  following() { return Fs.isOpen || this.follow; }, // le plein écran suit toujours la musique
   pauseFollow() {
-    if (!this.follow) return;
+    if (!this.following()) return;
     this.followPaused = true;
-    this.el('npResume')?.classList.remove('hidden');
+    this.el(Fs.isOpen ? 'fsResume' : 'npResume')?.classList.remove('hidden');
   },
   resumeFollow() {
     this.followPaused = false;
     this.el('npResume')?.classList.add('hidden');
+    this.el('fsResume')?.classList.add('hidden');
     this.syncDoc(true);
   },
   // Position voulue dans le document pour l'instant ct du morceau
@@ -2115,8 +2290,9 @@ const Np = {
     return Math.min(1, last.pos + rate * (ct - last.t));
   },
   syncDoc(force) {
-    if (!this.isOpen || this.tab !== 'tabs' || !this.follow || this.followPaused) return;
-    const box = this.el('npDoc');
+    if (!this.following() || this.followPaused) return;
+    if (!Fs.isOpen && (!this.isOpen || this.tab !== 'tabs')) return;
+    const box = this.box();
     if (!box || !box.scrollHeight) return;
     const p = this.targetPos(Player.audio.currentTime, box);
     if (p == null) return;
@@ -2140,6 +2316,16 @@ const Np = {
     notify('song_text', 'Tablature synchronisée', `${state.me} a placé des repères de synchronisation sur « ${t.title} »`, '#/morceau/' + t.songId, 'markers:' + t.audioId);
     return row;
   },
+  // Déplace un repère dans le document (son instant dans le morceau ne change pas)
+  async moveMarker(id, pos) {
+    const m = this.allMarkers.find(x => x.id === id), t = this.track();
+    if (!m) return;
+    pos = Math.min(1, Math.max(0, pos));
+    await q(db.from('tab_markers').update({ pos }).eq('id', id));
+    m.pos = pos;
+    this.renderMarkers();
+    if (t) notify('song_text', 'Tablature synchronisée', `${state.me} a ajusté les repères de synchronisation sur « ${t.title} »`, '#/morceau/' + t.songId, 'markers:' + t.audioId);
+  },
   async deleteMarkers(ids) {
     if (!ids.length) return;
     await q(db.from('tab_markers').delete().in('id', ids));
@@ -2148,12 +2334,13 @@ const Np = {
     this.syncDoc(true);
   },
   async setDocZoom(z) {
-    const box = this.el('npDoc');
+    const box = this.box();
     if (!box) return;
     const p = docPos(box);
     this.docZoom = Math.min(3, Math.max(1, Math.round(z * 4) / 4));
+    if (Fs.isOpen) Fs.dirty = true; // la tab de la page « En lecture » sera redessinée en sortant
     await renderDoc(box, this.doc(), this.docZoom);
-    if (this.follow && !this.followPaused) this.syncDoc(true); else setDocPos(box, p);
+    if (this.following() && !this.followPaused) this.syncDoc(true); else setDocPos(box, p);
   },
 
   // ----- Tempo (hauteur conservée) -----
@@ -2219,6 +2406,7 @@ const Np = {
     const tick = () => {
       this.checkLoop();
       if (this.isOpen && !this.dragging) this.progress();
+      Fs.progress();
       this.syncDoc();
       this.raf = Player.audio.paused ? 0 : requestAnimationFrame(tick);
     };
@@ -2287,6 +2475,7 @@ const Np = {
     else if (v === 'dzoom+') Np.setDocZoom(Np.docZoom + 0.25);
     else if (v === 'resume') Np.resumeFollow();
     else if (v === 'markmode') Mk.open();
+    else if (v === 'fullscreen') Fs.open();
     else if (v === 'marklist') Np.el('npMarks').classList.toggle('hidden');
     else if (v === 'markgo') {
       const m = Np.allMarkers.find(x => x.id === b.dataset.id);
@@ -2304,7 +2493,7 @@ const Np = {
   a.addEventListener('seeked', () => Np.syncDoc(true)); // on avance ou recule : la tab saute au bon endroit
   a.addEventListener('timeupdate', () => { if (a.paused) return; if (document.hidden) Np.syncDoc(); });
   let rz;
-  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Np.isOpen && Np.tab === 'tabs' && Np.el('npDoc')) Np.setDocZoom(Np.docZoom); }, 300); });
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Fs.isOpen || (Np.isOpen && Np.tab === 'tabs' && Np.el('npDoc'))) Np.setDocZoom(Np.docZoom); }, 300); });
   a.addEventListener('pause', () => clearTimeout(Np.loopTimer));
   // Glisser vers le bas depuis le haut de la page pour la fermer
   let g = null;
