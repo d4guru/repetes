@@ -2717,7 +2717,7 @@ const Np = {
           <div class="cm-under">
             ${Object.entries(reacts).map(([e, who]) => `<button type="button" class="cm-r${who.includes(state.me) ? ' on' : ''}" data-np="cmreact" data-id="${c.id}" data-e="${e}" title="${esc(who.join(', '))}">${e} ${who.length}</button>`).join('')}
             <button type="button" class="cm-r cm-radd" data-np="cmpick" aria-label="Réagir">☺</button>
-            <span class="cm-picker">${['👍', '🔥', '❤️'].map(e => `<button type="button" class="cm-r" data-np="cmreact" data-id="${c.id}" data-e="${e}">${e}</button>`).join('')}</span>
+            <span class="cm-picker">${['👍', '🔥', '❤️', '🤘'].map(e => `<button type="button" class="cm-r" data-np="cmreact" data-id="${c.id}" data-e="${e}">${e}</button>`).join('')}</span>
             ${mine ? `<span class="cm-acts"><button type="button" class="btn-sm" data-np="cmedit" data-id="${c.id}">Modifier</button><button type="button" class="btn-sm btn-danger" data-np="cmdel" data-id="${c.id}">Supprimer</button></span>` : ''}
           </div>
         </div>
