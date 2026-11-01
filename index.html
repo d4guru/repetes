@@ -339,6 +339,7 @@ body{overflow-x:clip}
 .cal-in-prev{animation:calFromLeft .25s ease-out}
 @media (prefers-reduced-motion: reduce){.cal-in-next,.cal-in-prev{animation:none}}
 .w-only{display:none}
+.w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
 /* ===== Version ordinateur (grand écran) ===== */
 @media (min-width: 900px){
@@ -346,6 +347,11 @@ body{overflow-x:clip}
   html,body{font-size:15px}
   .m-only{display:none}
   .w-only{display:inline}
+  .w-flex{display:flex!important}
+  .cal-head{gap:14px}
+  .sw-arrow{align-items:center;justify-content:center;width:38px;height:38px;min-height:0;padding:0 0 3px;border-radius:50%;font-size:24px;line-height:1;background:var(--surface2)}
+  .split-nav{display:flex;justify-content:space-between;gap:10px;margin-bottom:14px}
+  .split-nav button:disabled{opacity:.35;cursor:default}
   /* Menu à gauche : nom du groupe, membre, cloche puis les pages */
   header.top{position:fixed;left:0;top:0;width:var(--side);height:118px;flex-direction:column;align-items:stretch;justify-content:center;gap:10px;
     padding:18px 20px;background:var(--surface);backdrop-filter:none;border-bottom:0;border-right:1px solid var(--border);z-index:7}
@@ -934,6 +940,14 @@ async function routeSplit(view, id, sub) {
       if (vp) { vp.dataset.prev = ''; vp.dataset.next = ''; vp.querySelectorAll('.pane-side').forEach(p => p.remove()); }
     } else R.innerHTML = `<div class="split-empty">Aucune répète ce mois-ci.<br>Clique sur un jour libre pour en créer une.</div>`;
   }
+  // Flèches précédente / suivante au-dessus du détail
+  const vp = R.querySelector('.swipe-vp');
+  if (vp && kind !== 'cal') {
+    const what = kind === 'reh' ? ['Répète précédente', 'Répète suivante'] : ['Morceau précédent', 'Morceau suivant'];
+    R.insertAdjacentHTML('afterbegin', `<div class="split-nav">
+      <button class="btn-sm" data-swipe="prev" ${vp.dataset.prev ? '' : 'disabled'} title="${what[0]}">‹ ${what[0]}</button>
+      <button class="btn-sm" data-swipe="next" ${vp.dataset.next ? '' : 'disabled'} title="${what[1]}">${what[1]} ›</button></div>`);
+  }
   // Élément choisi mis en évidence dans la liste
   if (sel) L.querySelectorAll(`a[href$="/${sel}"]`).forEach(a => (a.closest('.card') || (a.classList.contains('cal-cell') ? a : null))?.classList.add('sel'));
   if (state.splitKey !== kind + sel) { if (state.splitKey) window.scrollTo(0, 0); state.splitKey = kind + sel; }
@@ -1242,8 +1256,10 @@ function monthPane(ym, byDate, today, isCurrent) {
   }
   return `
     <div class="cal-head" style="justify-content:center">
+      <button class="sw-arrow w-flex" data-swipe="prev" aria-label="Mois précédent" title="Mois précédent">‹</button>
       <h2 style="cursor:pointer" data-act="calnav" data-ym="${today.slice(0, 7)}" data-dir="${ym > today.slice(0, 7) ? 'prev' : 'next'}"
         title="Revenir au mois en cours">${esc(first.toLocaleDateString('fr-CH', { month: 'long', year: 'numeric' }))}</h2>
+      <button class="sw-arrow w-flex" data-swipe="next" aria-label="Mois suivant" title="Mois suivant">›</button>
     </div>
     <div class="cal-grid ${isCurrent && state.calDir ? 'cal-in-' + state.calDir : ''}">${cells}</div>`;
 }
@@ -1269,7 +1285,7 @@ async function viewCalendar(ym, $app = APP) {
   $app.innerHTML = `
     ${nextBannerHtml(upcoming)}
     ${swipeFrame('cal', prev, next, monthPane(prev, byDate, today), monthPane(ym, byDate, today, true), monthPane(next, byDate, today))}
-    <p class="muted small" style="text-align:center;margin:8px 0 0"><span class="m-only">Glisse pour changer de mois · touche un jour libre pour créer une répète</span><span class="w-only">Glisse à deux doigts sur le pavé tactile (ou Maj + molette) pour changer de mois · clique sur un jour libre pour créer une répète</span></p>
+    <p class="muted small" style="text-align:center;margin:8px 0 0"><span class="m-only">Glisse pour changer de mois · touche un jour libre pour créer une répète</span><span class="w-only">‹ › ou glisse à deux doigts sur le pavé tactile pour changer de mois · clique sur un jour libre pour créer une répète</span></p>
     <div class="legend">${legend.map(([l, c, strike]) => `<span class="chip" style="background:${c}2e;color:${c}${strike ? ';text-decoration:line-through' : ''}">${l}</span>`).join('')}</div>
 
     <h3>Répètes du mois (${reh.length})</h3>
@@ -1398,6 +1414,32 @@ function swipeTo(vp, dir) {
     go(swipeHash(vp, target));
   }, 290);
 }
+// Flèches ‹ › (version ordinateur)
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-swipe]');
+  if (!b || b.disabled) return;
+  const vp = b.closest('.swipe-vp') || b.closest('.split-main')?.querySelector('.swipe-vp');
+  if (vp) swipeTo(vp, b.dataset.swipe);
+});
+
+// Raccourcis clavier : Espace = lecture/pause, ← → = reculer/avancer de 5 s, Échap = fermer
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.closest('input, textarea, select, [contenteditable]'))) return; // on écrit : pas de raccourci
+  if (e.key === 'Escape') {
+    const top = Layers.stack[Layers.stack.length - 1];
+    const obj = { np: Np, dv: Dv, mk: Mk, fs: Fs }[top]; // la fenêtre du bas (popup) a déjà son Échap
+    if (obj && obj.isOpen) { e.preventDefault(); obj.close(); }
+    return;
+  }
+  if (!Player.queue.length || Player.i < 0 || Sheet.isOpen) return; // rien en lecture
+  const a = Player.audio;
+  if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); Player.toggle(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); a.currentTime = Math.max(0, a.currentTime - 5); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); a.currentTime = Math.min(a.duration || 0, a.currentTime + 5); }
+});
+
 const Wheel = { acc: 0, t: 0, locked: false };
 document.addEventListener('wheel', e => {
   const vp = e.target.closest('.swipe-vp');
