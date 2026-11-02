@@ -828,7 +828,7 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 41; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 42; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -2642,6 +2642,8 @@ const Clic = {
     return { vol: p.vol ?? 70, mode: p.mode || 'accent' };
   },
   savePrefs(ch) { try { localStorage.setItem('repetes_clic', JSON.stringify({ ...this.prefs(), ...ch })); } catch (e) { /* ignoré */ } },
+  // Volume du clic : curseur régulier, jusqu'à 3 fois le niveau d'origine
+  level(vol) { return (Number(vol) || 0) / 100 * 3; },
   bpm() { const t = Np.track(); return t && Number(t.bpm) > 0 ? Number(t.bpm) : null; },
   period() { const b = this.bpm(); return b ? 60 / b : null; },
   ensureCtx() {
@@ -2650,9 +2652,16 @@ const Clic = {
       if (!AC) return false;
       this.ctx = new AC();
       this.gain = this.ctx.createGain();
-      this.gain.connect(this.ctx.destination);
+      // Limiteur : le clic peut être poussé fort sans saturer ni grésiller
+      // (compresseur rapide qui fait ressortir la fin du clic, puis écrêtage doux qui garde le son sous le maximum)
+      const lim = this.ctx.createDynamicsCompressor();
+      lim.threshold.value = -9; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0; lim.release.value = 0.01;
+      const soft = this.ctx.createWaveShaper(), curve = new Float32Array(2049);
+      for (let i = 0; i < 2049; i++) { const x = i / 1024 - 1; curve[i] = Math.tanh(1.6 * x) / Math.tanh(1.6); }
+      soft.curve = curve;
+      this.gain.connect(lim); lim.connect(soft); soft.connect(this.ctx.destination);
     }
-    this.gain.gain.value = Math.pow(this.prefs().vol / 100, 1.5);
+    this.gain.gain.value = this.level(this.prefs().vol);
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
     return true;
   },
@@ -2739,7 +2748,7 @@ const Clic = {
   ['seeking', 'seeked', 'ratechange', 'pause'].forEach(ev => a.addEventListener(ev, () => Clic.reset()));
   a.addEventListener('ratechange', () => Clic.render());
   a.addEventListener('play', () => { if (Clic.on) { Clic.ensureCtx(); Clic.tick(); } });
-  document.getElementById('npClickVol').addEventListener('input', e => { Clic.savePrefs({ vol: Number(e.target.value) }); if (Clic.gain) Clic.gain.gain.value = Math.pow(Number(e.target.value) / 100, 1.5); });
+  document.getElementById('npClickVol').addEventListener('input', e => { Clic.savePrefs({ vol: Number(e.target.value) }); if (Clic.gain) Clic.gain.gain.value = Clic.level(e.target.value); });
 })();
 
 // ===== Waveform (forme d'onde) du morceau, comme sur SoundCloud =====
