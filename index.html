@@ -498,6 +498,21 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
 :root[data-theme=light] .notif.unread{background:rgba(226,90,44,.07)}
 :root[data-theme=light] .player{box-shadow:0 -4px 14px rgba(0,0,0,.08)}
 :root[data-theme=light] .thumb.ph{background:var(--surface2)}
+
+.np-wave{display:none}
+.np-bar.wave{height:64px}
+.np-bar.wave .np-wave{display:block;position:absolute;inset:0;width:100%;height:100%}
+.np-bar.wave .np-track{display:none}
+.np-bar.wave input[type=range]{height:64px;opacity:0;cursor:pointer}
+.np-bar.wave .np-loop{top:0;height:64px;border-radius:6px;background:rgba(255,255,255,.08);border-width:1.5px}
+.np-bar.wave .np-mark{top:0;height:64px;width:2px}
+.np-bar.wave .np-cmmarks{top:auto;bottom:-6px;height:8px}
+.np-bar.wave .np-cmmarks i{top:0;height:6px;width:6px;margin-left:-3px;border-radius:50%}
+.np-click{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.np-clickbtn{display:flex;align-items:center;gap:6px}
+.np-clickbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round}
+.np-clickbtn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.np-clickmode button{font-size:14px;min-height:36px}
 .w-only{display:none}
 .w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
@@ -660,6 +675,7 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
       <div class="np-loop hidden" id="npLoop"></div>
       <div class="np-mark hidden" id="npMarkA"></div>
       <div class="np-cmmarks" id="npCmMarks"></div>
+      <canvas class="np-wave" id="npWave" aria-hidden="true"></canvas>
       <input type="range" id="npSeek" min="0" max="1000" value="0" aria-label="Position">
     </div>
     <div class="row between np-times"><span id="npTime">0:00</span><span id="npDur">0:00</span></div>
@@ -680,6 +696,29 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
         <button class="btn-sm" data-np="rate" data-v="75">75 %</button>
         <button class="btn-sm" data-np="rate" data-v="90">90 %</button>
         <button class="btn-sm" data-np="rate" data-v="100">100 %</button>
+      </div>
+      <div class="np-click">
+        <div class="row" style="gap:8px">
+          <button class="btn-sm np-clickbtn" data-np="click" id="npClick" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l4 18H5z"/><path d="M12 15l5-9"/></svg>Clic</button>
+          <span class="muted small grow" id="npClickInfo"></span>
+        </div>
+        <div id="npClickMore" class="hidden">
+          <div class="row" style="gap:6px;margin-top:8px">
+            <button class="btn-sm grow" data-np="clickcal" title="Touche pile sur un premier temps pendant l'écoute">Caler ici</button>
+            <button class="btn-sm" data-np="clickm" title="Décaler d'un temps vers la gauche">‹ 1 temps</button>
+            <button class="btn-sm" data-np="clickp" title="Décaler d'un temps vers la droite">1 temps ›</button>
+          </div>
+          <div class="seg np-clickmode" style="margin-top:8px">
+            <button type="button" data-np="clickmode" data-v="accent">Accent sur le 1</button>
+            <button type="button" data-np="clickmode" data-v="flat">Tous pareils</button>
+          </div>
+          <div class="row" style="gap:10px;margin-top:8px">
+            <span class="muted small">Volume</span>
+            <input type="range" id="npClickVol" class="grow np-range" min="0" max="100" step="5" value="70" aria-label="Volume du clic">
+          </div>
+          <div class="muted small" id="npClickHint" style="margin-top:6px"></div>
+        </div>
       </div>
     </div>
 
@@ -789,7 +828,7 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 40; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 41; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -2594,6 +2633,194 @@ const Mk = {
 })();
 
 // ===== Page « En lecture » : paroles, tempo, boucle A-B =====
+// ===== Clic (métronome) calé sur le BPM du morceau =====
+const Clic = {
+  on: false, ctx: null, gain: null, timer: 0, scheduled: new Map(), offset: null,
+  prefs() {
+    let p = {};
+    try { p = JSON.parse(localStorage.getItem('repetes_clic') || '{}'); } catch (e) { /* défaut */ }
+    return { vol: p.vol ?? 70, mode: p.mode || 'accent' };
+  },
+  savePrefs(ch) { try { localStorage.setItem('repetes_clic', JSON.stringify({ ...this.prefs(), ...ch })); } catch (e) { /* ignoré */ } },
+  bpm() { const t = Np.track(); return t && Number(t.bpm) > 0 ? Number(t.bpm) : null; },
+  period() { const b = this.bpm(); return b ? 60 / b : null; },
+  ensureCtx() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      this.ctx = new AC();
+      this.gain = this.ctx.createGain();
+      this.gain.connect(this.ctx.destination);
+    }
+    this.gain.gain.value = Math.pow(this.prefs().vol / 100, 1.5);
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    return true;
+  },
+  toggle() {
+    if (!this.on && !this.bpm()) { toast("Indique d'abord le tempo d'origine (BPM) sur la fiche du morceau"); return; }
+    this.on = !this.on;
+    if (this.on) { if (!this.ensureCtx()) { this.on = false; toast("Le clic n'est pas disponible sur ce navigateur"); return; } this.start(); }
+    else this.stop();
+    this.render(); Wave.draw();
+  },
+  start() {
+    clearInterval(this.timer);
+    this.reset();
+    this.timer = setInterval(() => this.tick(), 25);
+  },
+  stop() { clearInterval(this.timer); this.timer = 0; this.reset(); },
+  // Annule les clics déjà programmés (on avance, on recule, on change de tempo…)
+  reset() { this.scheduled.forEach(o => { try { o.stop(); } catch (e) { /* déjà fini */ } }); this.scheduled.clear(); },
+  tick() {
+    const a = Player.audio, P = this.period();
+    if (!this.on || !P || a.paused || !this.ctx) return;
+    const rate = a.playbackRate || 1, now = this.ctx.currentTime, ct = a.currentTime, ahead = 0.12;
+    const off = this.offset || 0;
+    const first = Math.ceil((ct - off) / P - 1e-6), last = Math.floor((ct + ahead * rate - off) / P);
+    for (let n = first; n <= last; n++) {
+      if (this.scheduled.has(n)) continue;
+      const when = now + ((off + n * P) - ct) / rate;
+      if (when < now - 0.005) continue;
+      this.blip(Math.max(now, when), n);
+    }
+    // On oublie les clics passés
+    this.scheduled.forEach((o, n) => { if (off + n * P < ct - 1) this.scheduled.delete(n); });
+  },
+  blip(when, n) {
+    const ctx = this.ctx, accent = this.prefs().mode === 'accent' && ((n % 4) + 4) % 4 === 0;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = accent ? 1760 : 1100;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(accent ? 1 : 0.7, when + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 0.045);
+    o.connect(g); g.connect(this.gain);
+    o.start(when); o.stop(when + 0.06);
+    this.scheduled.set(n, o);
+  },
+  // Calage : le premier temps est là où on touche (temps de réaction compensé pendant la lecture)
+  calibrate() {
+    const a = Player.audio, t = Np.track();
+    if (!t || !t.audioId) return;
+    this.setOffset(Math.max(0, a.currentTime - (a.paused ? 0 : 0.06 * (a.playbackRate || 1))));
+    toast('Clic calé sur ce temps');
+  },
+  shift(dir) {
+    const P = this.period();
+    if (!P) return;
+    this.setOffset((this.offset || 0) + dir * P);
+  },
+  setOffset(v) {
+    const P = this.period(), t = Np.track();
+    // On garde la valeur la plus proche du début (même calage, une mesure de 4 temps plus tôt)
+    if (P) { const M = 4 * P; v = ((v % M) + M) % M; }
+    this.offset = Math.round(v * 1000) / 1000;
+    this.reset(); this.render(); Wave.draw();
+    clearTimeout(this.saveT);
+    const id = t && t.audioId, val = this.offset;
+    this.saveT = setTimeout(() => { if (id) db.from('song_audio').update({ click_offset: val }).eq('id', id).then(() => {}, () => {}); }, 600);
+  },
+  onTrack(meta) { this.offset = meta && meta.click_offset != null ? Number(meta.click_offset) : null; this.reset(); this.render(); },
+  render() {
+    const btn = Np.el('npClick');
+    if (!btn) return;
+    const bpm = this.bpm(), pr = this.prefs();
+    btn.classList.toggle('on', this.on);
+    btn.setAttribute('aria-pressed', this.on);
+    Np.el('npClickMore').classList.toggle('hidden', !this.on);
+    Np.el('npClickInfo').textContent = !bpm ? 'Indique le BPM sur la fiche pour utiliser le clic'
+      : this.on ? `${Math.round(bpm * (Player.audio.playbackRate || 1) * 10) / 10} BPM · 4/4` : `${bpm} BPM`;
+    Np.el('npClickHint').textContent = this.offset == null ? "Pas encore calé : pendant l'écoute, touche « Caler ici » pile sur un premier temps." : 'Calage enregistré pour tout le groupe.';
+    document.querySelectorAll('[data-np="clickmode"]').forEach(b => b.classList.toggle('on', b.dataset.v === pr.mode));
+    const vol = Np.el('npClickVol'); if (vol && document.activeElement !== vol) vol.value = pr.vol;
+  },
+};
+(() => {
+  const a = Player.audio;
+  ['seeking', 'seeked', 'ratechange', 'pause'].forEach(ev => a.addEventListener(ev, () => Clic.reset()));
+  a.addEventListener('ratechange', () => Clic.render());
+  a.addEventListener('play', () => { if (Clic.on) { Clic.ensureCtx(); Clic.tick(); } });
+  document.getElementById('npClickVol').addEventListener('input', e => { Clic.savePrefs({ vol: Number(e.target.value) }); if (Clic.gain) Clic.gain.gain.value = Math.pow(Number(e.target.value) / 100, 1.5); });
+})();
+
+// ===== Waveform (forme d'onde) du morceau, comme sur SoundCloud =====
+const Wave = {
+  peaks: null, hover: null, busy: null, N: 240,
+  setup(t, meta) {
+    this.peaks = meta && Array.isArray(meta.peaks) && meta.peaks.length ? meta.peaks : null;
+    this.hover = null;
+    Np.el('npSeek').closest('.np-bar').classList.toggle('wave', !!this.peaks);
+    if (this.peaks) this.draw();
+    else if (t && t.audioId && t.url) this.compute(t);
+  },
+  // Première écoute : on analyse le fichier une fois, puis le dessin est enregistré pour tout le groupe
+  async compute(t) {
+    if (this.busy === t.audioId) return;
+    this.busy = t.audioId;
+    try {
+      const res = await fetch(t.url);
+      const len = Number(res.headers.get('content-length') || 0);
+      if (!res.ok || len > 80 * 1024 * 1024) throw new Error('fichier trop lourd');
+      const buf = await res.arrayBuffer();
+      const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext || window.AudioContext || window.webkitAudioContext;
+      const ctx = AC === window.OfflineAudioContext || AC === window.webkitOfflineAudioContext ? new AC(1, 2, 44100) : new AC();
+      const audio = await new Promise((ok, ko) => { const p = ctx.decodeAudioData(buf, ok, ko); if (p && p.then) p.then(ok, ko); });
+      if (ctx.close) ctx.close().catch(() => {});
+      const ch = [...Array(audio.numberOfChannels).keys()].map(i => audio.getChannelData(i));
+      const size = Math.floor(ch[0].length / this.N) || 1, raw = [];
+      for (let i = 0; i < this.N; i++) {
+        let sum = 0, cnt = 0, mx = 0;
+        for (let j = i * size; j < (i + 1) * size && j < ch[0].length; j += 16) {
+          let v = 0; for (const c of ch) v += Math.abs(c[j]); v /= ch.length;
+          sum += v * v; cnt++; if (v > mx) mx = v;
+        }
+        raw.push(Math.sqrt(sum / (cnt || 1)) * 0.7 + mx * 0.3);
+      }
+      const top = Math.max(...raw) || 1;
+      const peaks = raw.map(v => Math.max(2, Math.round(v / top * 100)));
+      db.from('song_audio').update({ peaks }).eq('id', t.audioId).then(() => {}, () => {});
+      if (Np.track() === t) { this.peaks = peaks; Np.el('npSeek').closest('.np-bar').classList.add('wave'); this.draw(); }
+    } catch (e) { /* pas de waveform : la barre simple reste */ }
+    finally { if (this.busy === t.audioId) this.busy = null; }
+  },
+  colors() {
+    const light = document.documentElement.dataset.theme === 'light';
+    // Partie jouée plus foncée, partie à venir plus claire (comme SoundCloud)
+    return light ? { played: '#a8380f', rest: '#f5c3ac', hover: '#e07a52', beat: 'rgba(0,0,0,.2)' }
+      : { played: '#b8441b', rest: '#f6b293', hover: '#e8794f', beat: 'rgba(255,255,255,.22)' };
+  },
+  draw() {
+    const cv = Np.el('npWave');
+    if (!this.peaks || !cv || !Np.isOpen) return;
+    const w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+    if (!w || !h) return;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const g = cv.getContext('2d'), a = Player.audio, d = a.duration || 0, col = this.colors();
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    // Barres de 2 px espacées de 1 px (comme SoundCloud) : on regroupe les mesures selon la largeur
+    const src = this.peaks, n = Math.max(20, Math.min(src.length, Math.floor(w / 3))), step = w / n, bw = Math.max(1.5, step - 1);
+    const val = i => { let m = 0; const a0 = Math.floor(i * src.length / n), a1 = Math.max(a0 + 1, Math.floor((i + 1) * src.length / n)); for (let k = a0; k < a1; k++) m = Math.max(m, src[k]); return m; };
+    const px = d ? a.currentTime / d * w : 0, hx = this.hover;
+    // Traits légers aux premiers temps quand le clic est calé
+    if (Clic.on && Clic.offset != null && d && Clic.period()) {
+      g.fillStyle = col.beat;
+      const M = 4 * Clic.period();
+      for (let tt = Clic.offset; tt < d; tt += M) g.fillRect(Math.round(tt / d * w), 0, 1, h);
+    }
+    for (let i = 0; i < n; i++) {
+      const x = i * step, bh = Math.max(2, val(i) / 100 * (h - 4));
+      g.fillStyle = x + bw / 2 <= px ? col.played : (hx != null && x <= hx ? col.hover : col.rest);
+      g.fillRect(x, (h - bh) / 2, bw, bh);
+    }
+  },
+};
+(() => {
+  const seek = document.getElementById('npSeek');
+  seek.addEventListener('mousemove', e => { if (!Wave.peaks) return; const r = seek.getBoundingClientRect(); Wave.hover = e.clientX - r.left; Wave.draw(); });
+  seek.addEventListener('mouseleave', () => { Wave.hover = null; Wave.draw(); });
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => Wave.draw(), 150); });
+})();
+
 // ===== Tablature en plein écran, avec petit lecteur en bas =====
 const Fs = {
   isOpen: false, dirty: false, wl: null, dragging: false,
@@ -2714,6 +2941,7 @@ const Np = {
   },
   // Nouveau morceau : on repart à 100 % sans boucle
   onTrack() {
+    Wave.peaks = null; Np.el('npSeek').closest('.np-bar').classList.remove('wave'); Clic.onTrack(null);
     if (Fs.isOpen) Fs.close(); // autre morceau : autre tablature
     this.loop = { a: null, b: null };
     this.setRate(1);
@@ -2738,7 +2966,8 @@ const Np = {
         q(db.from('song_files').select('id,title,path,kind').eq('song_id', t.songId).order('created_at')),
         t.audioId ? q(db.from('tab_markers').select('*').eq('audio_id', t.audioId)) : Promise.resolve([]),
         this.loadComments(t),
-      ]);
+        t.audioId ? q(db.from('song_audio').select('id,peaks,click_offset').eq('id', t.audioId).maybeSingle()).catch(() => null) : Promise.resolve(null),
+      ]).then(r => { if (r[0]) t.bpm = r[0].bpm; if (this.track() === t) { Clic.onTrack(r[4]); Wave.setup(t, r[4]); } return r; });
       if (s) { this.songs[t.songId] = s; t.bpm = s.bpm; }
       const urlOf = await signedUrls((files || []).map(f => f.path));
       this.docs = [
@@ -3198,6 +3427,7 @@ const Np = {
     this.el('npTime').textContent = Player.fmt(a.currentTime);
     this.el('npDur').textContent = Player.fmt(a.duration);
     if (!this.dragging && a.duration) this.el('npSeek').value = Math.round(a.currentTime / a.duration * 1000);
+    Wave.draw();
   },
 };
 (() => {
@@ -3221,6 +3451,11 @@ const Np = {
     else if (v === 'b+') Np.nudge('b', 0.5);
     else if (v === 'loopclear') Np.clearLoop();
     else if (v === 'tab') { Np.tab = b.dataset.v; if (Np.tab === 'comments') Np.cmJump = true; Np.renderText(); }
+    else if (v === 'click') Clic.toggle();
+    else if (v === 'clickcal') Clic.calibrate();
+    else if (v === 'clickm') Clic.shift(-1);
+    else if (v === 'clickp') Clic.shift(1);
+    else if (v === 'clickmode') { Clic.savePrefs({ mode: b.dataset.v }); Clic.reset(); Clic.render(); }
     else if (v === 'cmtime') Np.toggleCmTime();
     else if (v === 'cmsend') Np.sendComment();
     else if (v === 'cmseek') { a.currentTime = Number(b.dataset.t) || 0; if (a.paused) a.play().catch(() => {}); }
@@ -3245,7 +3480,7 @@ const Np = {
     else if (v === 'gosong') { const id = Np.track()?.songId; Np.close(); setTimeout(() => go('#/morceau/' + id), 150); }
   });
   Np.el('npTempo').addEventListener('input', e => Np.setRate(Number(e.target.value) / 100));
-  seek.addEventListener('input', () => { Np.dragging = true; if (a.duration) Np.el('npTime').textContent = Player.fmt(seek.value / 1000 * a.duration); });
+  seek.addEventListener('input', () => { Np.dragging = true; if (a.duration) { Np.el('npTime').textContent = Player.fmt(seek.value / 1000 * a.duration); if (Wave.peaks) { Wave.hover = seek.value / 1000 * seek.clientWidth; Wave.draw(); } } });
   seek.addEventListener('change', () => { if (a.duration) a.currentTime = seek.value / 1000 * a.duration; Np.dragging = false; Np.progress(); });
   a.addEventListener('loadedmetadata', () => { Np.renderLoop(); Np.renderCmMarks(); });
   // Appui long (ou clic droit) sur un de ses messages : Modifier / Supprimer
