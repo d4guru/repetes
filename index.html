@@ -236,9 +236,9 @@ body.sheet-open{overflow:hidden}
 audio{width:100%;margin-top:8px;color-scheme:dark}
 .audio-item{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px}
 input[type=file]{padding:9px;font-size:15px}
-label.pick{display:flex;align-items:center;justify-content:center;gap:10px;min-height:50px;margin:0;border-radius:11px;
+label.pick,button.pick{display:flex;align-items:center;justify-content:center;gap:10px;min-height:50px;margin:0;border-radius:11px;
   border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:16px;font-weight:600;cursor:pointer}
-label.pick svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+label.pick svg,button.pick svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .player{position:fixed;left:0;right:0;bottom:calc(68px + env(safe-area-inset-bottom));z-index:6;display:flex;align-items:center;gap:8px;
   background:var(--player-bg);border-top:1px solid var(--border);padding:8px 10px 6px;box-shadow:0 -6px 18px rgba(0,0,0,.35)}
 .pl-cover{flex:none;width:46px;height:46px;border-radius:8px;overflow:hidden;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700}
@@ -684,6 +684,7 @@ nav.bottom a{font-size:12px}
   <button class="pl-btn" id="plNext" aria-label="Suivant"><svg viewBox="0 0 24 24"><path d="M18 5v14"/><path d="M5 5l10 7-10 7z"/></svg></button>
 </div>
 <audio id="plAudio" preload="none"></audio>
+<input type="file" id="taskFilePicker" class="file-hidden" multiple accept="image/*,application/pdf,video/*,.jpg,.jpeg,.png,.heic,.heif,.webp,.mp4,.mov,.pdf" aria-hidden="true" tabindex="-1">
 <div id="np" class="np hidden" role="dialog" aria-label="En lecture">
   <div class="np-top np-drag">
     <button class="pl-btn" data-np="close" aria-label="Fermer"><svg viewBox="0 0 24 24" class="np-chev"><path d="M6 9l6 6 6-6"/></svg></button>
@@ -858,7 +859,7 @@ nav.bottom a{font-size:12px}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 45; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 46; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -1336,23 +1337,27 @@ async function viewTask(id, $app = APP) {
         <div class="task-fname small">${esc(x.title || '')}</div>
         <button class="btn-sm btn-ghost task-fdel" data-act="taskdelfile" data-id="${x.id}" aria-label="Supprimer ${esc(x.title || '')}">✕</button>
       </div>`).join('')}</div>` : ''}
-    <input type="file" id="taskFileInput" class="file-hidden" multiple accept="image/*,application/pdf,video/*" data-change="taskfiles" data-id="${t.id}">
-    <label for="taskFileInput" class="pick" style="margin-top:10px">
+    <button type="button" class="pick full" data-act="taskaddfiles" data-id="${t.id}" style="margin-top:10px">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
-      Ajouter des photos, PDF ou vidéos</label>
+      Ajouter des photos, PDF ou vidéos</button>
     <p class="muted small">50 Mo maximum par fichier.</p>
     <button class="btn-danger full" style="margin-top:20px" data-act="taskdel" data-id="${t.id}">Supprimer cette tâche</button>`;
 }
 async function uploadTaskFiles(taskId, files) {
-  let n = 0;
+  let n = 0, i = 0;
   for (const f of files) {
+    i++;
     if (f.size > 50 * 1024 * 1024) { toast(`« ${f.name} » dépasse 50 Mo`); continue; }
-    const kind = (f.type || '').startsWith('image/') ? 'image' : (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) ? 'pdf' : (f.type || '').startsWith('video/') ? 'video' : null;
+    // Certains téléphones ne donnent pas le type du fichier : on se fie alors à l'extension
+    const ty = f.type || '', ext0 = (f.name.split('.').pop() || '').toLowerCase();
+    const kind = ty.startsWith('image/') || /^(jpe?g|png|gif|webp|heic|heif)$/.test(ext0) ? 'image'
+      : ty === 'application/pdf' || ext0 === 'pdf' ? 'pdf'
+      : ty.startsWith('video/') || /^(mp4|mov|m4v|webm|3gp|mkv)$/.test(ext0) ? 'video' : null;
     if (!kind) { toast(`Type de fichier non pris en charge : ${f.name}`); continue; }
+    toast(files.length > 1 ? `Envoi ${i}/${files.length} : « ${short(f.name, 30)} »…` : `Envoi de « ${short(f.name, 40)} »…`);
     const ext = ((f.name.split('.').pop() || kind).toLowerCase().replace(/[^a-z0-9]/g, '') || kind).slice(0, 5);
     const path = `tasks/${taskId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    toast(`Envoi de « ${short(f.name, 40)} »…`);
-    const { error } = await db.storage.from(MEDIA).upload(path, f, { contentType: f.type || undefined });
+    const { error } = await db.storage.from(MEDIA).upload(path, f, { contentType: f.type || ({ image: 'image/jpeg', pdf: 'application/pdf', video: 'video/mp4' })[kind] });
     if (error) { toast('Envoi impossible : ' + error.message); continue; }
     await q(db.from('task_files').insert({ task_id: taskId, path, kind, title: f.name, size: f.size, added_by: state.me }));
     n++;
@@ -4019,7 +4024,7 @@ function onRealtime(p) {
 }
 // Ne redessine pas la page si on est en train d'écrire, d'écouter ou de glisser
 function busyEditing() {
-  return Sheet.isOpen || (Swipe && Swipe.g) || document.querySelector('.swipe-vp[data-busy]')
+  return (state.picking && Date.now() - state.picking < 5 * 60000) || Sheet.isOpen || (Swipe && Swipe.g) || document.querySelector('.swipe-vp[data-busy]')
     || document.querySelector('textarea:focus, input:focus, select:focus')
     || document.querySelector('#editReh:not(.hidden), [id^="edit-"]:not(.hidden), #audioChosen:not(.hidden)')
     || [...document.querySelectorAll('main audio')].some(a => !a.paused);
@@ -4255,6 +4260,13 @@ const actions = {
   },
   rename(el) { openRenameSheet('song', el.dataset.id, document.getElementById('songTitle').textContent); },
   tasknew() { openTaskSheet(null); },
+  // Le sélecteur de fichiers est hors de la page : il survit si la page est redessinée pendant qu'on choisit
+  taskaddfiles(el) {
+    const p = document.getElementById('taskFilePicker');
+    p.dataset.id = el.dataset.id; p.value = '';
+    state.picking = Date.now();
+    p.click();
+  },
   taskedit() { if (state.taskCur) openTaskSheet(state.taskCur); },
   taskcats() { openCatsSheet(); },
   taskfilter(el) { try { localStorage.setItem('repetes_taskfilter', el.dataset.v); } catch (e) { /* ignoré */ } route(); },
@@ -4730,6 +4742,26 @@ if ('serviceWorker' in navigator) {
   });
 }
 window.addEventListener('hashchange', route);
+// Pendant qu'on choisit un fichier (galerie, explorateur), la page ne doit pas être redessinée
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t.closest('input[type=file]') || t.closest('label[for]') && document.getElementById(t.closest('label[for]').htmlFor)?.type === 'file') state.picking = Date.now();
+}, true);
+document.addEventListener('change', e => { if (e.target.type === 'file') state.picking = 0; }, true);
+document.getElementById('taskFilePicker').addEventListener('change', async e => {
+  state.picking = 0;
+  const p = e.target, id = p.dataset.id, files = [...p.files];
+  if (!id || !files.length) return;
+  lastLocalAction = Date.now();
+  const n = await uploadTaskFiles(id, files);
+  p.value = '';
+  lastLocalAction = Date.now();
+  if (n) { toast(n > 1 ? `${n} fichiers ajoutés` : 'Fichier ajouté'); route(); }
+});
+document.addEventListener('visibilitychange', () => {
+  // Retour sans avoir choisi de fichier (annulation) : on libère la page après un court délai
+  if (document.visibilityState === 'visible' && state.picking) setTimeout(() => { if (state.picking && Date.now() - state.picking > 2500) state.picking = 0; }, 3000);
+});
 document.addEventListener('visibilitychange', () => {
   // Rafraîchit les données quand on revient sur l'app, sauf si un champ est en cours d'édition
   if (state.authed && document.visibilityState === 'visible') {
