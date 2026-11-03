@@ -536,6 +536,17 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
 .cat-color{flex:none;width:44px;height:44px;padding:2px;border-radius:10px}
 nav.bottom a{font-size:12px}
 @media (min-width:900px){ nav.bottom a{font-size:15px} }
+
+.vote-box{margin:8px 0 14px;padding:12px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--accent)}
+.vote-opts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.vote-opts button{min-height:42px;padding:4px;font-size:14px;background:var(--bg)}
+.vote-opts button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.vote-who{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.vote-who .chip.muted{opacity:.6}
+.vote-res{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0 12px;font-size:14px;color:var(--muted)}
+.vote-res.kept{color:var(--yes)}
+.chip.vote-me{background:rgba(232,100,58,.16);color:var(--accent);flex:none}
+#npVote .vote-box{text-align:left}
 .w-only{display:none}
 .w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
@@ -696,6 +707,7 @@ nav.bottom a{font-size:12px}
     <div class="np-cover np-drag" id="npCover"></div>
     <div class="np-title" id="npTitle"></div>
     <div class="np-sub" id="npSub"></div>
+    <div id="npVote"></div>
     <div class="np-bar">
       <div class="np-track"></div>
       <div class="np-loop hidden" id="npLoop"></div>
@@ -859,7 +871,7 @@ nav.bottom a{font-size:12px}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 46; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 47; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -1630,7 +1642,8 @@ function openSongSheet() {
   Sheet.open('newSong', `
     <h2 style="margin:6px 0 14px">Nouveau morceau</h2>
     <label style="margin-top:0">Titre</label>
-    <input type="text" name="title" required placeholder="Titre du morceau" autocomplete="off">`, `
+    <input type="text" name="title" required placeholder="Titre du morceau" autocomplete="off">
+    <label class="check" style="margin-top:12px"><input type="checkbox" name="proposal" value="1"><span>C'est une proposition : le groupe vote pour la garder ou non</span></label>`, `
     <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
     <button type="submit" class="btn-accent grow">Créer</button>`);
   setTimeout(() => document.querySelector('#sheetBody input[name=title]')?.focus(), 250);
@@ -2074,8 +2087,47 @@ function initSetlistSort() {
   });
 }
 
+// ===== Propositions : le groupe vote pour garder ou non un morceau =====
+const VOTE_OPTS = [['fire', '🔥', 'Chaud'], ['meh', '🤷', 'Bof'], ['no', '👎', 'Non']];
+const voteCounts = votes => Object.fromEntries(VOTE_OPTS.map(([k]) => [k, (votes || []).filter(v => v.vote === k).length]));
+function voteLine(votes) {
+  const c = voteCounts(votes), n = (votes || []).length;
+  return `${n}/${state.members.length} vote${n > 1 ? 's' : ''}${n ? ' · ' + VOTE_OPTS.filter(([k]) => c[k]).map(([k, e]) => `${e} ${c[k]}`).join(' ') : ''}`;
+}
+// Bloc de vote (fiche du morceau et « En lecture »)
+function songVoteHtml(s, votes) {
+  if (!s || !s.proposal) return '';
+  const mine = (votes || []).find(v => v.member === state.me)?.vote;
+  if (s.proposal !== 'open') {
+    return `<div class="vote-res ${s.proposal}">${s.proposal === 'kept' ? '✅ Retenu par le vote' : '✖ Écarté par le vote'} · ${voteLine(votes)}
+      ${s.proposal === 'rejected' ? `<button class="btn-sm" data-act="songrescue" data-id="${s.id}">Repêcher</button>` : ''}</div>`;
+  }
+  return `<div class="vote-box">
+    <div class="row between"><strong>Proposition${s.proposed_by ? ' de ' + esc(s.proposed_by) : ''}</strong><span class="muted small">${voteLine(votes)}</span></div>
+    <div class="vote-opts">${VOTE_OPTS.map(([k, e, l]) => `<button class="${mine === k ? 'on' : ''}" data-act="songvote" data-id="${s.id}" data-v="${k}">${e} ${l}</button>`).join('')}</div>
+    <div class="vote-who">${state.members.map(m => { const v = (votes || []).find(x => x.member === m); const o = v && VOTE_OPTS.find(x => x[0] === v.vote); return `<span class="chip ${v ? '' : 'muted'}">${esc(m)} ${o ? o[1] : '…'}</span>`; }).join('')}</div>
+    <div class="muted small" style="margin-top:6px">Quand tout le monde a voté : retenu s'il y a une majorité de 🔥, sinon écarté.</div>
+  </div>`;
+}
+async function castSongVote(songId, v) {
+  lastLocalAction = Date.now();
+  await q(db.from('song_votes').upsert({ song_id: songId, member: state.me, vote: v, updated_at: new Date().toISOString() }, { onConflict: 'song_id,member' }));
+  const [s, votes] = await Promise.all([
+    q(db.from('songs').select('id,title,proposal').eq('id', songId).maybeSingle()),
+    q(db.from('song_votes').select('member,vote').eq('song_id', songId)),
+  ]);
+  if (!s || s.proposal !== 'open') return;
+  // Tout le monde a voté : décision automatique (majorité de 🔥)
+  if (state.members.every(m => votes.some(x => x.member === m))) {
+    const kept = voteCounts(votes).fire > state.members.length / 2;
+    await q(db.from('songs').update({ proposal: kept ? 'kept' : 'rejected', decided_at: new Date().toISOString() }).eq('id', songId));
+    notify('song_new', kept ? 'Proposition retenue' : 'Proposition écartée', `« ${s.title} » est ${kept ? 'retenu' : 'écarté'} (${voteLine(votes)})`, '#/morceau/' + songId);
+    toast(kept ? 'Vote terminé : morceau retenu 🔥' : 'Vote terminé : morceau écarté');
+  } else toast('Vote enregistré');
+}
+
 // ===== Liste des morceaux =====
-function songCard(s, urlOf, inDone) {
+function songCard(s, urlOf, inDone, extra) {
   const fin = (s.song_audio || []).find(a => a.id === s.final_audio_id);
   return `
     <a class="card song-link row" style="gap:12px" data-title="${esc(s.title.toLowerCase())}" href="#/morceau/${s.id}">
@@ -2083,12 +2135,12 @@ function songCard(s, urlOf, inDone) {
       <div class="grow" style="min-width:0">
         <div class="row between"><span class="title grow" style="font-size:17px">${esc(s.title)}</span>${s.frozen_at ? doneBadge() : ''}<span class="muted">›</span></div>
         ${s.frozen_at && (fin || inDone) ? `<div class="muted small song-final">${fin ? 'Version finale : ' + esc(fin.title || 'Sans titre') : ''}${inDone ? (fin ? ' · ' : '') + 'le ' + esc(fmtShort(s.frozen_at)) : ''}</div>` : ''}
-        ${dotsHtml(s.song_progress)}
+        ${extra || dotsHtml(s.song_progress)}
       </div>
     </a>`;
 }
 async function viewSongs($app = APP) {
-  const songs = await q(db.from('songs').select('id,title,cover_path,frozen_at,final_audio_id,song_progress(member,level),song_audio!song_audio_song_id_fkey(id,title)').order('title'));
+  const songs = await q(db.from('songs').select('id,title,cover_path,frozen_at,final_audio_id,proposal,proposed_by,song_progress(member,level),song_audio!song_audio_song_id_fkey(id,title),song_votes(member,vote)').order('title'));
   const urlOf = await signedUrls(songs.map(s => s.cover_path));
   songs.forEach(s => { s.status = songStatus(s.song_progress); });
   const groups = ['en-cours', 'a-apprendre', 'pret'];
@@ -2096,11 +2148,20 @@ async function viewSongs($app = APP) {
     <h2>Morceaux</h2>
     ${fabHtml('newsong', 'Nouveau morceau')}
     ${songs.length > 5 ? `<input type="search" id="songSearch" placeholder="Rechercher un morceau…" style="margin-bottom:14px">` : ''}
+    ${(() => {
+      const props = songs.filter(s => s.proposal === 'open');
+      return props.length ? `<h3>Propositions à voter (${props.length})</h3>` + props.map(s => songCard(s, urlOf, false,
+        `<div class="small" style="margin-top:4px">${(s.song_votes || []).some(v => v.member === state.me) ? `<span class="muted">${voteLine(s.song_votes)}</span>` : '<span class="chip vote-me">À toi de voter</span>'}</div>`)).join('') : '';
+    })()}
     ${songs.length ? groups.map(g => {
-      const list = songs.filter(s => s.status === g);
+      const list = songs.filter(s => s.status === g && s.proposal !== 'open' && s.proposal !== 'rejected');
       if (!list.length) return '';
       return `<h3>${SONG_STATUS[g]} (${list.length})</h3>` + list.map(s => songCard(s, urlOf)).join('');
     }).join('') : `<div class="empty">Aucun morceau.<br>Ajoute le premier avec le bouton + en bas à droite.</div>`}
+    ${(() => {
+      const rej = songs.filter(s => s.proposal === 'rejected');
+      return rej.length ? `<details class="fold" data-fold="rejected" ${foldOpen('rejected')} style="margin-top:18px"><summary class="fold-sum"><h3 style="margin:0">Écartés (${rej.length})</h3><span class="grow"></span>${FOLD_CHEV}</summary>${rej.map(s => songCard(s, urlOf, false, `<div class="muted small" style="margin-top:4px">${voteLine(s.song_votes)}</div>`)).join('')}</details>` : '';
+    })()}
   `;
 }
 
@@ -2139,9 +2200,10 @@ function fieldBlock(song, field, label, cls, locked, fold) {
 }
 // Construit le contenu d'une fiche de morceau (page actuelle et voisines du glisser)
 async function songHtml(id, hasPrev, hasNext) {
-  const [song, hist] = await Promise.all([
+  const [song, hist, votes] = await Promise.all([
     q(db.from('songs').select('*, song_progress(member,level,note), song_audio!song_audio_song_id_fkey(id,title,path,size,added_by,created_at), song_files(id,title,path,kind,size,pages,added_by,created_at)').eq('id', id).maybeSingle()),
     q(db.from('setlist_items').select('note, rehearsal_id, rehearsals(date)').eq('song_id', id)),
+    q(db.from('song_votes').select('member,vote').eq('song_id', id)),
   ]);
   if (!song) return null;
   const audios = (song.song_audio || []).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
@@ -2170,6 +2232,7 @@ async function songHtml(id, hasPrev, hasNext) {
       <span style="opacity:${hasPrev ? 1 : .25}">‹</span> glisse pour changer de morceau <span style="opacity:${hasNext ? 1 : .25}">›</span>
     </p>
 
+    ${songVoteHtml(song, votes)}
     ${locked ? `<div class="frozen-banner">
       <div class="frozen-ico">${LOCK_ICO}</div>
       <div class="grow">
@@ -2190,6 +2253,7 @@ async function songHtml(id, hasPrev, hasNext) {
     <span class="chip ${status}">${SONG_STATUS[status]}</span>${locked ? ' ' + doneBadge() : ''}
     <span class="muted small" style="margin-left:6px">calculé selon le niveau de chacun</span>
     ${locked ? '' : `<button class="btn-sm freeze-btn" data-act="freeze" data-id="${song.id}">${LOCK_ICO}Marquer comme terminé</button>`}
+    ${locked || song.proposal ? '' : `<button class="btn-sm btn-ghost full" style="margin-top:8px" data-act="propose" data-id="${song.id}">🗳 Soumettre au vote du groupe</button>`}
 
     <div class="row" style="gap:10px;margin-top:14px">
       <label for="bpmInput" style="margin:0" class="grow">Tempo d'origine</label>
@@ -2332,7 +2396,7 @@ function fmtAgo(ts) {
 }
 async function viewListen($app = APP) {
   const [songs, heard] = await Promise.all([
-    q(db.from('songs').select('id,title,cover_path,bpm,final_audio_id,song_audio!song_audio_song_id_fkey(id,title,path,created_at,added_by,audio_comments(count))')),
+    q(db.from('songs').select('id,title,cover_path,bpm,final_audio_id,proposal,song_votes(member,vote),song_audio!song_audio_song_id_fkey(id,title,path,created_at,added_by,audio_comments(count))')),
     q(db.from('audio_listens').select('audio_id').eq('member', state.me)),
   ]);
   Listen.heard = new Set((heard || []).map(h => h.audio_id));
@@ -2350,7 +2414,8 @@ async function viewListen($app = APP) {
   list.forEach(s => s.recs.forEach(a => {
     state.listenAll[a.id] = { songId: s.id, audioId: a.id, title: s.title, audioTitle: a.title || 'Sans titre', url: urlOf(a.path),
       cover: urlOf(s.cover_path), bpm: s.bpm, addedBy: a.added_by, createdAt: a.created_at,
-      nComments: (a.audio_comments && a.audio_comments[0] && a.audio_comments[0].count) || 0, isFinal: a.id === s.final_audio_id };
+      nComments: (a.audio_comments && a.audio_comments[0] && a.audio_comments[0].count) || 0, isFinal: a.id === s.final_audio_id,
+      proposal: s.proposal, myVote: (s.song_votes || []).some(v => v.member === state.me), votes: s.song_votes || [] };
   }));
   // « Tout lire » et la suite de la lecture : la dernière version de chaque morceau, dans l'ordre de la liste
   state.listenQueue = list.map(s => state.listenAll[s.recs[0].id]);
@@ -2365,6 +2430,8 @@ async function viewListen($app = APP) {
         <div class="lrow-title">${eq}<span class="lrow-name">${esc(ver ? t.audioTitle : t.title)}</span>${t.isFinal ? `<span class="chip final">${ver ? 'Finale' : 'Version finale'}</span>` : ''}</div>
         <div class="muted small lrow-sub">${esc((ver ? [t.addedBy, fmtAgo(t.createdAt)] : [t.audioTitle, t.addedBy, fmtAgo(t.createdAt)]).filter(Boolean).join(' · '))}</div>
       </div>
+      ${!ver && t.proposal === 'open' ? (t.myVote ? `<span class="lrow-cm" title="Votes">🗳 ${t.votes.length}/${state.members.length}</span>` : '<span class="chip vote-me">À voter</span>') : ''}
+      ${!ver && t.proposal === 'rejected' ? '<span class="chip">Écarté</span>' : ''}
       ${t.nComments ? `<span class="lrow-cm" title="${t.nComments} commentaire${t.nComments > 1 ? 's' : ''}">💬 ${t.nComments}</span>` : ''}
       <span class="lrow-new" title="Pas encore écoutée"></span>
     </div>`;
@@ -3203,6 +3270,7 @@ const Np = {
     this.el('npPrev').disabled = Player.i === 0;
     this.el('npNext').disabled = Player.i === Player.queue.length - 1;
     this.renderTempo(); this.renderLoop(); this.progress();
+    this.el('npVote').innerHTML = ''; this.renderVote();
     // Paroles, tablatures (PDF, photos), notes et repères du morceau (rechargés à chaque ouverture)
     this.el('npText').innerHTML = '<div class="muted small" style="padding:12px 0">Chargement…</div>';
     try {
@@ -3282,6 +3350,18 @@ const Np = {
     this.el('npFollow').addEventListener('change', e => { this.follow = e.target.checked; this.followPaused = false; this.el('npResume').classList.add('hidden'); this.syncDoc(true); });
     await renderDoc(box, doc, this.docZoom);
     this.syncDoc(true);
+  },
+  // ----- Vote sur une proposition -----
+  async renderVote() {
+    const t = this.track(), box = this.el('npVote');
+    if (!t || !box) return;
+    try {
+      const [s, votes] = await Promise.all([
+        q(db.from('songs').select('id,title,proposal,proposed_by').eq('id', t.songId).maybeSingle()),
+        q(db.from('song_votes').select('member,vote').eq('song_id', t.songId)),
+      ]);
+      if (this.track() === t) box.innerHTML = s && s.proposal === 'open' ? songVoteHtml(s, votes) : '';
+    } catch (e) { box.innerHTML = ''; }
   },
   // ----- Commentaires sur la démo (une discussion par version) -----
   comments: [], cmT: null, cmEdit: null, cmJump: false,
@@ -4006,6 +4086,7 @@ async function startRealtime() {
 }
 function stopRealtime() { if (rtChannel) { db.removeChannel(rtChannel); rtChannel = null; } }
 function onRealtime(p) {
+  if (p.table === 'song_votes' && Np.isOpen) Np.renderVote();
   if (p.table === 'audio_comments' || p.table === 'audio_comment_reactions') {
     if (Date.now() - lastLocalAction > 1500) Np.refreshComments();
     if (location.hash.startsWith('#/ecoute')) scheduleRefresh(); // compteurs 💬 de la liste
@@ -4260,6 +4341,19 @@ const actions = {
   },
   rename(el) { openRenameSheet('song', el.dataset.id, document.getElementById('songTitle').textContent); },
   tasknew() { openTaskSheet(null); },
+  async songvote(el) { await castSongVote(el.dataset.id, el.dataset.v); route(); if (Np.isOpen) Np.renderVote(); },
+  async propose(el) {
+    if (!confirm('Soumettre ce morceau au vote du groupe ? Il passera dans « Propositions à voter » jusqu\'à la fin du vote.')) return;
+    const title = document.getElementById('songTitle')?.textContent || '';
+    await q(db.from('song_votes').delete().eq('song_id', el.dataset.id));
+    await q(db.from('songs').update({ proposal: 'open', proposed_by: state.me, decided_at: null }).eq('id', el.dataset.id));
+    route();
+    notify('song_new', 'Nouvelle proposition', `${state.me} propose « ${title} » : écoute et vote`, '#/morceau/' + el.dataset.id);
+  },
+  async songrescue(el) {
+    await q(db.from('songs').update({ proposal: 'kept' }).eq('id', el.dataset.id));
+    toast('Morceau repêché'); route();
+  },
   // Le sélecteur de fichiers est hors de la page : il survit si la page est redessinée pendant qu'on choisit
   taskaddfiles(el) {
     const p = document.getElementById('taskFilePicker');
@@ -4507,9 +4601,11 @@ document.addEventListener('submit', async e => {
     } else if (form.dataset.form === 'newSong') {
       const title = (d.title || '').trim();
       if (!title) { toast('Donne un titre au morceau'); return; }
-      const s = await q(db.from('songs').insert({ title }).select('id').single());
+      const prop = !!d.proposal;
+      const s = await q(db.from('songs').insert({ title, ...(prop ? { proposal: 'open', proposed_by: state.me } : {}) }).select('id').single());
       afterSheet('#/morceau/' + s.id);
-      notify('song_new', 'Nouveau morceau', `${state.me} a ajouté « ${title} »`, '#/morceau/' + s.id);
+      if (prop) notify('song_new', 'Nouvelle proposition', `${state.me} propose « ${title} » : écoute et vote`, '#/morceau/' + s.id);
+      else notify('song_new', 'Nouveau morceau', `${state.me} a ajouté « ${title} »`, '#/morceau/' + s.id);
     } else if (form.dataset.form === 'uploadFile') {
       const { file, songId } = state.pendingFile || {};
       const title = (d.title || '').trim() || 'Tablature';
