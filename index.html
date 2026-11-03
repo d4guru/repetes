@@ -543,6 +543,7 @@ nav.bottom a{font-size:12px}
 .vote-opts button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
 .vote-who{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
 .vote-who .chip.muted{opacity:.6}
+.vote-chat{margin-top:10px}
 .vote-res{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0 12px;font-size:14px;color:var(--muted)}
 .vote-res.kept{color:var(--yes)}
 .chip.vote-me{background:rgba(232,100,58,.16);color:var(--accent);flex:none}
@@ -871,7 +872,7 @@ nav.bottom a{font-size:12px}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 47; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 48; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -2106,6 +2107,7 @@ function songVoteHtml(s, votes) {
     <div class="row between"><strong>Proposition${s.proposed_by ? ' de ' + esc(s.proposed_by) : ''}</strong><span class="muted small">${voteLine(votes)}</span></div>
     <div class="vote-opts">${VOTE_OPTS.map(([k, e, l]) => `<button class="${mine === k ? 'on' : ''}" data-act="songvote" data-id="${s.id}" data-v="${k}">${e} ${l}</button>`).join('')}</div>
     <div class="vote-who">${state.members.map(m => { const v = (votes || []).find(x => x.member === m); const o = v && VOTE_OPTS.find(x => x[0] === v.vote); return `<span class="chip ${v ? '' : 'muted'}">${esc(m)} ${o ? o[1] : '…'}</span>`; }).join('')}</div>
+    <button class="btn-sm full vote-chat" data-act="votechat" data-id="${s.id}">💬 Discuter de la proposition<span class="vote-cm-n"></span></button>
     <div class="muted small" style="margin-top:6px">Quand tout le monde a voté : retenu s'il y a une majorité de 🔥, sinon écarté.</div>
   </div>`;
 }
@@ -3360,7 +3362,7 @@ const Np = {
         q(db.from('songs').select('id,title,proposal,proposed_by').eq('id', t.songId).maybeSingle()),
         q(db.from('song_votes').select('member,vote').eq('song_id', t.songId)),
       ]);
-      if (this.track() === t) box.innerHTML = s && s.proposal === 'open' ? songVoteHtml(s, votes) : '';
+      if (this.track() === t) { box.innerHTML = s && s.proposal === 'open' ? songVoteHtml(s, votes) : ''; this.renderCmCount(); }
     } catch (e) { box.innerHTML = ''; }
   },
   // ----- Commentaires sur la démo (une discussion par version) -----
@@ -3377,6 +3379,7 @@ const Np = {
   renderCmCount() {
     const n = this.comments.length, c = this.el('npCmCount');
     if (c) c.textContent = n ? ' ' + n : '';
+    document.querySelectorAll('#npVote .vote-cm-n').forEach(x => { x.textContent = n ? ` (${n})` : ''; });
   },
   // Petits traits sur la barre de lecture aux moments commentés
   renderCmMarks() {
@@ -4341,6 +4344,16 @@ const actions = {
   },
   rename(el) { openRenameSheet('song', el.dataset.id, document.getElementById('songTitle').textContent); },
   tasknew() { openTaskSheet(null); },
+  // Discussion d'une proposition = les commentaires de sa démo, dans « En lecture »
+  votechat(el) {
+    const id = el.dataset.id, cur = Player.queue[Player.i];
+    Np.tab = 'comments'; Np.cmJump = true;
+    if (Np.isOpen && cur && cur.songId === id) { Np.renderText(); return; }
+    const q0 = (state.songQueue || []).filter(t => t.songId === id);
+    if (!q0.length) { toast("Ajoute d'abord un enregistrement pour pouvoir en discuter"); return; }
+    if (!cur || cur.songId !== id) Player.start(q0, 0, true);
+    Np.open();
+  },
   async songvote(el) { await castSongVote(el.dataset.id, el.dataset.v); route(); if (Np.isOpen) Np.renderVote(); },
   async propose(el) {
     if (!confirm('Soumettre ce morceau au vote du groupe ? Il passera dans « Propositions à voter » jusqu\'à la fin du vote.')) return;
@@ -4348,7 +4361,8 @@ const actions = {
     await q(db.from('song_votes').delete().eq('song_id', el.dataset.id));
     await q(db.from('songs').update({ proposal: 'open', proposed_by: state.me, decided_at: null }).eq('id', el.dataset.id));
     route();
-    notify('song_new', 'Nouvelle proposition', `${state.me} propose « ${title} » : écoute et vote`, '#/morceau/' + el.dataset.id);
+    const demo = (state.songQueue || []).find(t => t.songId === el.dataset.id);
+    notify('song_new', 'Nouvelle proposition', `${state.me} propose « ${title} » : écoute, vote et discute`, demo ? '#/ecoute/' + demo.audioId : '#/morceau/' + el.dataset.id);
   },
   async songrescue(el) {
     await q(db.from('songs').update({ proposal: 'kept' }).eq('id', el.dataset.id));
