@@ -14,7 +14,7 @@ const MIN_PRESENT = 4;
 const TZ = 'Europe/Zurich';
 const TYPES = new Set([
   'reh_new', 'reh_edit', 'reh_delete', 'dispo', 'vote_open', 'vote', 'reh_status', 'setlist', 'bilan', 'setlist_note',
-  'song_new', 'song_text', 'level', 'perso_note', 'audio', 'comment', 'cover', 'song_delete', 'group', 'reminder', 'dispo_reminder',
+  'song_new', 'song_text', 'level', 'perso_note', 'audio', 'comment', 'task', 'cover', 'song_delete', 'group', 'reminder', 'dispo_reminder',
 ]);
 const DEFAULT_REMINDERS = [{ days: 1, time: '18:00' }];
 const DEFAULT_DISPO_REMINDERS = [{ days: 3, time: '18:00' }, { days: 1, time: '18:00' }];
@@ -79,7 +79,9 @@ async function handleNotify(p: Record<string, unknown>) {
   const group_key = p.group_key ? String(p.group_key).slice(0, 200) : null;
 
   const [{ data: members }, prefs] = await Promise.all([db.from('members').select('name'), loadPrefs()]);
-  const recipients = (members || []).map((m) => m.name as string).filter((n) => n !== actor && wants(prefs, n, type));
+  // Destinataires précis (ex. les personnes d'une tâche) ; sinon tout le groupe
+  const only = Array.isArray(p.recipients) ? (p.recipients as unknown[]).map(String) : null;
+  const recipients = (members || []).map((m) => m.name as string).filter((n) => n !== actor && wants(prefs, n, type) && (!only || only.includes(n)));
   if (!recipients.length) return json({ sent: 0 });
 
   // Même personne, même élément, il y a peu : on met à jour la notification existante, sans nouvelle alerte

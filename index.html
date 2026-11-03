@@ -513,6 +513,29 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
 .np-clickbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linejoin:round;stroke-linecap:round}
 .np-clickbtn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
 .np-clickmode button{font-size:14px;min-height:36px}
+
+.task-card{display:flex;align-items:flex-start;gap:12px}
+.task-check{flex:none;width:28px;height:28px;min-height:0;padding:0;margin-top:1px;border-radius:50%;border:2px solid var(--muted);background:transparent;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+.task-check svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.st-doing .task-check{border-color:var(--accent)}
+.st-done .task-check{border-color:var(--yes);background:var(--yes)}
+.st-done .task-title{text-decoration:line-through;opacity:.6}
+.task-link{display:block;min-width:0}
+.task-title{font-size:16px}
+.task-cat{flex:none;font-size:12px}
+.task-meta{margin-top:3px}
+.task-late{color:var(--no);font-weight:650}
+.task-files{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+.task-file{position:relative;min-width:0}
+.task-thumb{width:100%;aspect-ratio:1;min-height:0;padding:0;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--surface2)}
+.task-thumb img{width:100%;height:100%;object-fit:cover}
+.task-thumb .file-ico{width:auto;height:auto;padding:6px 8px}
+.task-fname{margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.task-fdel{position:absolute;top:4px;right:4px;min-height:26px;width:26px;padding:0;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:0}
+.task-who{display:grid;grid-template-columns:1fr 1fr;column-gap:12px}
+.cat-color{flex:none;width:44px;height:44px;padding:2px;border-radius:10px}
+nav.bottom a{font-size:12px}
+@media (min-width:900px){ nav.bottom a{font-size:15px} }
 .w-only{display:none}
 .w-flex{display:none!important}
 .split-empty{color:var(--muted);text-align:center;padding:80px 20px}
@@ -639,6 +662,8 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/></svg>Morceaux</a>
   <a href="#/ecoute" data-tab="ecoute">
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="14" width="4.5" height="6.5" rx="1.8"/><rect x="16.5" y="14" width="4.5" height="6.5" rx="1.8"/></svg>Écoute</a>
+  <a href="#/taches" data-tab="taches">
+    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 9l1.6 1.6L12.5 7.7M8 15l1.6 1.6 2.9-2.9M14.5 9.2H17M14.5 15.2H17"/></svg>Tâches</a>
   <a href="#/reglages" data-tab="reglages">
     <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Réglages</a>
 </nav>
@@ -833,7 +858,7 @@ details.fold[open] .fold-chev{transform:rotate(180deg)}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 43; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 44; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -1124,7 +1149,7 @@ async function route() {
   const [view, id] = parts;
   document.querySelectorAll('#nav a').forEach(a => {
     const t = a.dataset.tab;
-    a.classList.toggle('on', t === view || (t === 'repetes' && view === 'repete') || (t === 'morceaux' && view === 'morceau'));
+    a.classList.toggle('on', t === view || (t === 'repetes' && view === 'repete') || (t === 'morceaux' && view === 'morceau') || (t === 'taches' && view === 'tache'));
   });
   document.getElementById('bell').classList.toggle('on', view === 'notifications');
   if (!state.me) return viewPicker();
@@ -1132,7 +1157,9 @@ async function route() {
   state.detailReh = view === 'repete' ? id || null : null;
   state.detailSong = view === 'morceau' ? id || null : null;
   try {
-    if (isWide() && ['repetes', 'repete', 'morceaux', 'morceau', 'calendrier'].includes(view)) await routeSplit(view, id, parts[2]);
+    if (isWide() && ['repetes', 'repete', 'morceaux', 'morceau', 'calendrier', 'taches', 'tache'].includes(view)) await routeSplit(view, id, parts[2]);
+    else if (view === 'taches') await viewTasks();
+    else if (view === 'tache' && id) await viewTask(id);
     else if (view === 'repete' && id) await viewRehearsal(id);
     else if (view === 'morceaux') await viewSongs();
     else if (view === 'morceau' && id) await viewSong(id);
@@ -1155,7 +1182,7 @@ const isWide = () => WIDE.matches;
 try { WIDE.addEventListener('change', () => { if (state.authed) route(); }); } catch (e) { WIDE.addListener(() => { if (state.authed) route(); }); }
 
 async function routeSplit(view, id, sub) {
-  const kind = view.startsWith('repete') ? 'reh' : view.startsWith('morceau') ? 'song' : 'cal';
+  const kind = view.startsWith('repete') ? 'reh' : view.startsWith('morceau') ? 'song' : view.startsWith('tache') ? 'task' : 'cal';
   let s = APP.querySelector(':scope > .split');
   if (!s || s.dataset.split !== kind) {
     APP.innerHTML = `<div class="split" data-split="${kind}"><section class="split-list"></section><section class="split-main"></section></div>`;
@@ -1172,6 +1199,11 @@ async function routeSplit(view, id, sub) {
       if (sel) await viewRehearsal(sel, R);
       else R.innerHTML = `<div class="split-empty">Aucune répète.<br>Ajoute la prochaine avec le bouton +.</div>`;
     }
+  } else if (kind === 'task') {
+    await viewTasks(L);
+    sel = id || L.querySelector('a.task-link')?.getAttribute('href').split('/')[2] || null;
+    if (sel) await viewTask(sel, R);
+    else R.innerHTML = `<div class="split-empty">Aucune tâche.<br>Ajoute la première avec le bouton +.</div>`;
   } else if (kind === 'song') {
     if (id) { sel = id; state.detailSong = sel; await Promise.all([viewSongs(L), viewSong(sel, R)]); }
     else {
@@ -1221,6 +1253,147 @@ async function routeListenWide() {
   }
   await viewListen(sp.children[0]);
   if (Player.queue[Player.i] && !(Np.isOpen && !Np.docked)) Np.dock();
+}
+
+// ===== Tâches de chacun (partitions, covers, promo, Instagram…) =====
+const TASK_STATUS = { todo: 'À faire', doing: 'En cours', done: 'Fait' };
+const TASK_NEXT = { todo: 'doing', doing: 'done', done: 'todo' };
+const taskFilter = () => { try { return localStorage.getItem('repetes_taskfilter') || 'mine'; } catch (e) { return 'mine'; } };
+function taskWho(t) {
+  const a = t.assignees || [];
+  if (!a.length) return 'Personne';
+  if (state.members.length && state.members.every(m => a.includes(m))) return 'Tout le monde';
+  return a.join(', ');
+}
+function taskCat(t) {
+  const c = t.task_categories;
+  return c ? `<span class="chip task-cat" style="background:${esc(c.color)}26;color:${esc(c.color)}">${esc(c.name)}</span>` : '';
+}
+function taskDue(t) {
+  if (!t.due_date) return '';
+  const late = t.status !== 'done' && t.due_date < todayISO();
+  return `<span class="small ${late ? 'task-late' : 'muted'}">${late ? 'En retard · ' : ''}pour le ${esc(fmtDate(t.due_date, { day: 'numeric', month: 'short' }))}</span>`;
+}
+const TASK_CHECK = { todo: '', doing: '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg>', done: '<svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>' };
+async function viewTasks($app = APP) {
+  const tasks = await q(db.from('tasks').select('*, task_categories(name,color), task_files(id)').order('created_at', { ascending: false }));
+  const f = taskFilter();
+  const list = f === 'mine' ? tasks.filter(t => (t.assignees || []).includes(state.me)) : tasks;
+  const byDue = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999');
+  const card = t => `
+    <div class="card task-card st-${t.status}">
+      <button class="task-check" data-act="taskstatus" data-id="${t.id}" data-s="${TASK_NEXT[t.status]}" aria-label="Statut : ${TASK_STATUS[t.status]} (toucher pour passer à « ${TASK_STATUS[TASK_NEXT[t.status]]} »)">${TASK_CHECK[t.status]}</button>
+      <a class="task-link grow" href="#/tache/${t.id}">
+        <div class="row between" style="align-items:flex-start;gap:8px"><span class="title task-title">${esc(t.title)}</span>${taskCat(t)}</div>
+        <div class="muted small task-meta">${esc(taskWho(t))}${(t.task_files || []).length ? ` · 📎 ${t.task_files.length}` : ''}</div>
+        ${taskDue(t)}
+      </a>
+    </div>`;
+  const group = st => list.filter(t => t.status === st).sort(byDue);
+  const done = group('done').sort((a, b) => (b.done_at || '').localeCompare(a.done_at || ''));
+  $app.innerHTML = `
+    <div class="row between" style="margin-bottom:10px"><h2 style="margin:0">Tâches</h2>
+      <button class="btn-sm" data-act="taskcats">Catégories</button></div>
+    ${fabHtml('tasknew', 'Nouvelle tâche')}
+    <div class="seg" style="margin-bottom:6px">
+      <button type="button" data-act="taskfilter" data-v="mine" class="${f === 'mine' ? 'on' : ''}">Mes tâches</button>
+      <button type="button" data-act="taskfilter" data-v="all" class="${f === 'all' ? 'on' : ''}">Toutes</button>
+    </div>
+    ${['todo', 'doing'].map(st => { const g = group(st); return g.length ? `<h3>${TASK_STATUS[st]} (${g.length})</h3>${g.map(card).join('')}` : ''; }).join('')}
+    ${!group('todo').length && !group('doing').length ? `<div class="empty">${f === 'mine' ? 'Rien à faire pour toi en ce moment.' : 'Aucune tâche en cours.'}<br>Ajoute une tâche avec le bouton +.</div>` : ''}
+    ${done.length ? `<details class="fold" data-fold="tasksdone" ${foldOpen('tasksdone')} style="margin-top:18px"><summary class="fold-sum"><h3 style="margin:0">Fait (${done.length})</h3><span class="grow"></span>${FOLD_CHEV}</summary>${done.map(card).join('')}</details>` : ''}`;
+}
+async function viewTask(id, $app = APP) {
+  const t = await q(db.from('tasks').select('*, task_categories(name,color), task_files(*)').eq('id', id).maybeSingle());
+  if (!t) { $app.innerHTML = `<div class="empty">Cette tâche n'existe plus.<br><br><a class="btn" href="#/taches">Retour</a></div>`; return; }
+  const files = (t.task_files || []).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  const urlOf = await signedUrls(files.map(x => x.path));
+  state.taskFiles = Object.fromEntries(files.map(x => [x.id, { ...x, url: urlOf(x.path) }]));
+  state.taskCur = t;
+  $app.innerHTML = `
+    <a class="back" href="#/taches">‹ Tâches</a>
+    <div class="row between" style="align-items:flex-start;margin:4px 0 8px">
+      <h2 class="grow" style="margin:0">${esc(t.title)}</h2>
+      <button class="btn-sm" data-act="taskedit" data-id="${t.id}">Modifier</button>
+    </div>
+    <div class="row wrap" style="gap:8px;margin-bottom:12px">${taskCat(t)}${taskDue(t)}</div>
+    <div class="seg" style="margin-bottom:14px">${Object.entries(TASK_STATUS).map(([k, l]) => `<button type="button" data-act="taskstatus" data-id="${t.id}" data-s="${k}" class="${t.status === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="card">
+      <div class="member-row"><span class="muted">Pour</span><span>${esc(taskWho(t))}</span></div>
+      <div class="member-row"><span class="muted">Créée par</span><span>${esc(t.created_by || '—')}</span></div>
+      ${t.status === 'done' && t.done_by ? `<div class="member-row"><span class="muted">Faite par</span><span>${esc(t.done_by)}</span></div>` : ''}
+    </div>
+    ${t.description ? `<pre class="lyrics" style="margin-top:12px">${esc(t.description)}</pre>` : ''}
+    <h3>Fichiers (${files.length})</h3>
+    ${files.length ? `<div class="task-files">${files.map(x => `
+      <div class="task-file">
+        <button class="task-thumb" data-act="taskopenfile" data-id="${x.id}" aria-label="Ouvrir ${esc(x.title || '')}">
+          ${x.kind === 'image' ? `<img src="${esc(urlOf(x.path))}" alt="" loading="lazy">` : `<span class="file-ico ${x.kind === 'pdf' ? 'pdf' : 'image'}">${x.kind === 'pdf' ? 'PDF' : '▶ VIDÉO'}</span>`}
+        </button>
+        <div class="task-fname small">${esc(x.title || '')}</div>
+        <button class="btn-sm btn-ghost task-fdel" data-act="taskdelfile" data-id="${x.id}" aria-label="Supprimer ${esc(x.title || '')}">✕</button>
+      </div>`).join('')}</div>` : ''}
+    <input type="file" id="taskFileInput" class="file-hidden" multiple accept="image/*,application/pdf,video/*" data-change="taskfiles" data-id="${t.id}">
+    <label for="taskFileInput" class="pick" style="margin-top:10px">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+      Ajouter des photos, PDF ou vidéos</label>
+    <p class="muted small">50 Mo maximum par fichier.</p>
+    <button class="btn-danger full" style="margin-top:20px" data-act="taskdel" data-id="${t.id}">Supprimer cette tâche</button>`;
+}
+async function uploadTaskFiles(taskId, files) {
+  let n = 0;
+  for (const f of files) {
+    if (f.size > 50 * 1024 * 1024) { toast(`« ${f.name} » dépasse 50 Mo`); continue; }
+    const kind = (f.type || '').startsWith('image/') ? 'image' : (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) ? 'pdf' : (f.type || '').startsWith('video/') ? 'video' : null;
+    if (!kind) { toast(`Type de fichier non pris en charge : ${f.name}`); continue; }
+    const ext = ((f.name.split('.').pop() || kind).toLowerCase().replace(/[^a-z0-9]/g, '') || kind).slice(0, 5);
+    const path = `tasks/${taskId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    toast(`Envoi de « ${short(f.name, 40)} »…`);
+    const { error } = await db.storage.from(MEDIA).upload(path, f, { contentType: f.type || undefined });
+    if (error) { toast('Envoi impossible : ' + error.message); continue; }
+    await q(db.from('task_files').insert({ task_id: taskId, path, kind, title: f.name, size: f.size, added_by: state.me }));
+    n++;
+  }
+  return n;
+}
+async function openTaskSheet(t) {
+  const cats = await q(db.from('task_categories').select('*').order('position').order('name'));
+  const a = t ? t.assignees || [] : [state.me];
+  Sheet.open('taskForm', `
+    <h2 style="margin:6px 0 12px">${t ? 'Modifier la tâche' : 'Nouvelle tâche'}</h2>
+    <input type="hidden" name="id" value="${t ? esc(t.id) : ''}">
+    <label style="margin-top:0">Titre</label>
+    <input type="text" name="title" required maxlength="200" value="${t ? esc(t.title) : ''}" placeholder="ex. Poster le teaser sur Instagram" autocomplete="off">
+    <label>Catégorie</label>
+    <select name="category"><option value="">Aucune</option>${cats.map(c => `<option value="${c.id}" ${t && t.category_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
+    <div class="row between" style="margin-top:12px"><label style="margin:0">Pour qui</label>
+      <button type="button" class="btn-sm btn-ghost" data-act="taskall">Tout le monde</button></div>
+    <div class="task-who">${state.members.map(m => `<label class="check"><input type="checkbox" name="who" value="${esc(m)}" ${a.includes(m) ? 'checked' : ''}><span>${esc(m)}${m === state.me ? ' <span class="muted small">(toi)</span>' : ''}</span></label>`).join('')}</div>
+    <label>Pour le (facultatif)</label>
+    <input type="date" name="due" value="${t && t.due_date ? esc(t.due_date) : ''}">
+    <label>Description (facultatif)</label>
+    <textarea name="description" style="min-height:90px">${t ? esc(t.description || '') : ''}</textarea>
+    ${t ? '' : `<label>Fichiers (facultatif) : photos, PDF ou vidéos, 50 Mo max</label><input type="file" name="files" multiple accept="image/*,application/pdf,video/*">`}`, `
+    <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
+    <button type="submit" class="btn-accent grow">${t ? 'Enregistrer' : 'Créer'}</button>`);
+}
+async function openCatsSheet() {
+  const cats = await q(db.from('task_categories').select('*').order('position').order('name'));
+  const row = c => `<div class="row cat-row" style="gap:8px;margin-bottom:8px">
+      <input type="color" name="color" value="${esc(c ? c.color : '#4c9aff')}" class="cat-color" aria-label="Couleur">
+      <input type="hidden" name="cid" value="${c ? esc(c.id) : ''}">
+      <input type="text" name="cname" maxlength="40" value="${c ? esc(c.name) : ''}" placeholder="Nom de la catégorie" class="grow">
+      <button type="button" class="btn-sm btn-icon btn-ghost" data-act="catdel" aria-label="Supprimer">✕</button>
+    </div>`;
+  Sheet.open('taskCats', `
+    <h2 style="margin:6px 0 6px">Catégories</h2>
+    <p class="muted small" style="margin:0 0 12px">Supprimer une catégorie ne supprime pas ses tâches : elles passent « sans catégorie ».</p>
+    <div id="catRows">${cats.map(row).join('')}</div>
+    <input type="hidden" name="deleted" id="catDeleted" value="">
+    <button type="button" class="btn-sm full" data-act="catadd">+ Ajouter une catégorie</button>
+    <template id="catTpl">${row(null)}</template>`, `
+    <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
+    <button type="submit" class="btn-accent grow">Enregistrer</button>`);
 }
 
 // ===== Connexion (mot de passe du groupe) =====
@@ -3595,11 +3768,13 @@ const NOTIF_TYPES = [
   { group: 'Morceaux', icon: 'song', items: [
     ['song_new', 'Nouveau morceau'], ['song_text', 'Paroles, notes et titre'], ['level', 'Niveau des autres'],
     ['perso_note', 'Notes perso des autres'], ['audio', 'Enregistrements'], ['comment', 'Commentaires sur les démos'], ['cover', 'Pochettes'], ['song_delete', 'Morceau supprimé']] },
+  { group: 'Tâches', icon: 'task', items: [['task', 'Tâches qui te sont attribuées, et tâches terminées']] },
   { group: 'Rappels', icon: 'clock', items: [['reminder', 'Rappel avant la répète'], ['dispo_reminder', 'Rappel si tu n\'as pas répondu ou répondu « peut-être »']] },
   { group: 'Groupe', icon: 'group', items: [['group', 'Nom du groupe et membres']] },
 ];
 const TYPE_ICON = Object.fromEntries(NOTIF_TYPES.flatMap(g => g.items.map(([t]) => [t, g.icon])));
 const ICONS = {
+  task: '<rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 9l1.6 1.6L12.5 7.7M8 15l1.6 1.6 2.9-2.9"/>',
   cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   song: '<path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -3609,9 +3784,14 @@ const DEFAULT_PREFS = { disabled_types: [], reminders: [{ days: 1, time: '18:00'
 const DAY_CHOICES = [[0, 'Le jour même'], [1, 'La veille'], [2, '2 jours avant'], [3, '3 jours avant']];
 
 // Envoie une notification aux autres membres (sans attendre, une erreur ne bloque jamais l'app)
-function notify(type, title, body, link, groupKey) {
+function notify(type, title, body, link, groupKey, recipients) {
   if (!state.me) return;
-  db.functions.invoke('notify', { body: { type, actor: state.me, title, body, link: link || '', group_key: groupKey || null } }).catch(() => {});
+  db.functions.invoke('notify', { body: { type, actor: state.me, title, body, link: link || '', group_key: groupKey || null, ...(recipients ? { recipients } : {}) } }).catch(() => {});
+}
+// Notification d'une tâche, seulement aux personnes concernées (jamais à soi-même)
+function notifyTask(t, title, body, people) {
+  const to = [...new Set((people || []).filter(p => p && p !== state.me))];
+  if (to.length) notify('task', title, body, '#/tache/' + t.id, null, to);
 }
 const short = (s, n = 90) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 const rehWhen = r => r ? fmtDate(r.date, { weekday: 'long', day: 'numeric', month: 'short' }) : 'une répète';
@@ -4059,6 +4239,52 @@ const actions = {
     notify('song_text', what[0], `${state.me} a modifié ${what[1]} de « ${song} »`, '#/morceau/' + el.dataset.id, `text:${el.dataset.id}:${f}`);
   },
   rename(el) { openRenameSheet('song', el.dataset.id, document.getElementById('songTitle').textContent); },
+  tasknew() { openTaskSheet(null); },
+  taskedit() { if (state.taskCur) openTaskSheet(state.taskCur); },
+  taskcats() { openCatsSheet(); },
+  taskfilter(el) { try { localStorage.setItem('repetes_taskfilter', el.dataset.v); } catch (e) { /* ignoré */ } route(); },
+  taskall() {
+    const boxes = [...document.querySelectorAll('#sheetBody input[name=who]')];
+    const all = boxes.every(b => b.checked);
+    boxes.forEach(b => { b.checked = !all; });
+  },
+  catadd() { document.getElementById('catRows').insertAdjacentHTML('beforeend', document.getElementById('catTpl').innerHTML); document.querySelector('#catRows .cat-row:last-child input[name=cname]').focus(); },
+  catdel(el) {
+    const r = el.closest('.cat-row'), id = r.querySelector('input[name=cid]').value;
+    if (id) { const d = document.getElementById('catDeleted'); d.value = [d.value, id].filter(Boolean).join(','); }
+    r.remove();
+  },
+  async taskstatus(el) {
+    const id = el.dataset.id, st = el.dataset.s;
+    const t = await q(db.from('tasks').select('id,title,assignees,created_by,status').eq('id', id).maybeSingle());
+    if (!t || t.status === st) return;
+    await q(db.from('tasks').update({ status: st, done_at: st === 'done' ? new Date().toISOString() : null, done_by: st === 'done' ? state.me : null }).eq('id', id));
+    route();
+    if (st === 'done') notifyTask(t, 'Tâche faite', `${state.me} a terminé « ${t.title} »`, [...(t.assignees || []), t.created_by]);
+  },
+  async taskopenfile(el) {
+    const f = state.taskFiles && state.taskFiles[el.dataset.id];
+    if (!f) return;
+    if (f.kind === 'video') {
+      Sheet.open('video', `<h2 style="margin:6px 0 10px">${esc(f.title || 'Vidéo')}</h2><video src="${esc(f.url)}" controls playsinline style="width:100%;max-height:70vh;border-radius:10px;background:#000"></video>`,
+        `<a class="btn grow" href="${esc(f.url)}" download target="_blank" rel="noopener" style="text-align:center;line-height:28px">Télécharger</a><button type="button" class="btn-accent grow" data-act="closesheet">Fermer</button>`);
+    } else Dv.open({ id: f.id, kind: f.kind, title: f.title, url: f.url });
+  },
+  async taskdelfile(el) {
+    const f = state.taskFiles && state.taskFiles[el.dataset.id];
+    if (!f || !confirm(`Supprimer « ${f.title || 'ce fichier'} » ?`)) return;
+    await db.storage.from(MEDIA).remove([f.path]);
+    await q(db.from('task_files').delete().eq('id', f.id));
+    route();
+  },
+  async taskdel(el) {
+    if (!confirm('Supprimer cette tâche et ses fichiers ?')) return;
+    const fs = await q(db.from('task_files').select('path').eq('task_id', el.dataset.id));
+    if (fs.length) await db.storage.from(MEDIA).remove(fs.map(x => x.path));
+    await q(db.from('tasks').delete().eq('id', el.dataset.id));
+    toast('Tâche supprimée');
+    go('#/taches');
+  },
   // Marquer un morceau comme terminé : on choisit la version finale parmi ses enregistrements
   async freeze(el) {
     const id = el.dataset.id;
@@ -4280,6 +4506,40 @@ document.addEventListener('submit', async e => {
       const song = document.getElementById('songTitle')?.textContent || '';
       afterSheet(null);
       notify('song_text', 'Nouvelle tablature', `${state.me} a ajouté la tablature « ${title} » (${isPdf ? 'PDF' : 'photo'}) à « ${song} »`, '#/morceau/' + songId, 'file:' + songId);
+    } else if (form.dataset.form === 'taskForm') {
+      const title = (d.title || '').trim();
+      if (!title) { toast('Donne un titre à la tâche'); return; }
+      const who = [...form.querySelectorAll('input[name=who]:checked')].map(x => x.value);
+      const row = { title, description: (d.description || '').trim() || null, category_id: d.category || null, assignees: who, due_date: d.due || null };
+      if (d.id) {
+        const before = await q(db.from('tasks').select('assignees').eq('id', d.id).maybeSingle());
+        await q(db.from('tasks').update(row).eq('id', d.id));
+        const added = who.filter(m => !(before?.assignees || []).includes(m));
+        notifyTask({ id: d.id }, 'Nouvelle tâche pour toi', `${state.me} t'a ajouté à « ${title} »`, added);
+        toast('Tâche enregistrée');
+        afterSheet(null);
+      } else {
+        const id = uuid();
+        await q(db.from('tasks').insert({ id, ...row, created_by: state.me }));
+        const files = [...(form.querySelector('input[name=files]')?.files || [])];
+        Sheet.close();
+        if (files.length) await uploadTaskFiles(id, files);
+        notifyTask({ id }, 'Nouvelle tâche pour toi', `${state.me} t'a attribué « ${title} »`, who);
+        toast('Tâche créée');
+        setTimeout(() => go('#/tache/' + id), 150);
+      }
+    } else if (form.dataset.form === 'taskCats') {
+      const del = (d.deleted || '').split(',').filter(Boolean);
+      if (del.length) await q(db.from('task_categories').delete().in('id', del));
+      const rows = [...form.querySelectorAll('.cat-row')];
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i], id = r.querySelector('input[name=cid]').value, name = r.querySelector('input[name=cname]').value.trim(), color = r.querySelector('input[name=color]').value;
+        if (!name) continue;
+        if (id) await q(db.from('task_categories').update({ name, color, position: i }).eq('id', id));
+        else await q(db.from('task_categories').insert({ name, color, position: i }));
+      }
+      toast('Catégories enregistrées');
+      afterSheet(null);
     } else if (form.dataset.form === 'freeze') {
       const final = d.final || null;
       await q(db.from('songs').update({ frozen_at: new Date().toISOString(), frozen_by: state.me, final_audio_id: final }).eq('id', d.id));
@@ -4336,7 +4596,11 @@ document.addEventListener('change', async e => {
   if (!el) return;
   lastLocalAction = Date.now();
   try {
-    if (el.dataset.change === 'itemnote') {
+    if (el.dataset.change === 'taskfiles') {
+      const n = await uploadTaskFiles(el.dataset.id, [...el.files]);
+      el.value = '';
+      if (n) { toast(n > 1 ? `${n} fichiers ajoutés` : 'Fichier ajouté'); route(); }
+    } else if (el.dataset.change === 'itemnote') {
       await q(db.from('setlist_items').update({ note: el.value }).eq('id', el.dataset.id));
       toast('Note enregistrée');
       const song = el.closest('.set-item')?.querySelector('.title')?.textContent || '';
