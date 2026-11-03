@@ -858,7 +858,7 @@ nav.bottom a{font-size:12px}
 // ===== Configuration Supabase =====
 const SB_URL = 'https://gdwwolgxivucqzdkvqfl.supabase.co';
 const SB_KEY = 'sb_publishable_Wu-x56xJxZAzSJBj0UwDew_fcLMt6u1';
-const APP_VERSION = 44; // à augmenter à chaque mise en ligne, comme le cache de sw.js
+const APP_VERSION = 45; // à augmenter à chaque mise en ligne, comme le cache de sw.js
 // Toujours des réponses fraîches de la base : le navigateur ne doit jamais resservir une ancienne réponse (même une erreur)
 const db = supabase.createClient(SB_URL, SB_KEY, { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } });
 // Compte unique du groupe (le mot de passe n'est PAS dans le code, chacun le tape à la connexion)
@@ -1258,6 +1258,8 @@ async function routeListenWide() {
 // ===== Tâches de chacun (partitions, covers, promo, Instagram…) =====
 const TASK_STATUS = { todo: 'À faire', doing: 'En cours', done: 'Fait' };
 const TASK_NEXT = { todo: 'doing', doing: 'done', done: 'todo' };
+// La catégorie « Tablature » (ou « Partition ») permet de lier un morceau à la tâche
+const isTabCat = name => /^\s*(tablature|partition)/i.test(name || '');
 const taskFilter = () => { try { return localStorage.getItem('repetes_taskfilter') || 'mine'; } catch (e) { return 'mine'; } };
 function taskWho(t) {
   const a = t.assignees || [];
@@ -1276,7 +1278,7 @@ function taskDue(t) {
 }
 const TASK_CHECK = { todo: '', doing: '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg>', done: '<svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>' };
 async function viewTasks($app = APP) {
-  const tasks = await q(db.from('tasks').select('*, task_categories(name,color), task_files(id)').order('created_at', { ascending: false }));
+  const tasks = await q(db.from('tasks').select('*, task_categories(name,color), task_files(id), songs(title)').order('created_at', { ascending: false }));
   const f = taskFilter();
   const list = f === 'mine' ? tasks.filter(t => (t.assignees || []).includes(state.me)) : tasks;
   const byDue = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999');
@@ -1285,7 +1287,7 @@ async function viewTasks($app = APP) {
       <button class="task-check" data-act="taskstatus" data-id="${t.id}" data-s="${TASK_NEXT[t.status]}" aria-label="Statut : ${TASK_STATUS[t.status]} (toucher pour passer à « ${TASK_STATUS[TASK_NEXT[t.status]]} »)">${TASK_CHECK[t.status]}</button>
       <a class="task-link grow" href="#/tache/${t.id}">
         <div class="row between" style="align-items:flex-start;gap:8px"><span class="title task-title">${esc(t.title)}</span>${taskCat(t)}</div>
-        <div class="muted small task-meta">${esc(taskWho(t))}${(t.task_files || []).length ? ` · 📎 ${t.task_files.length}` : ''}</div>
+        <div class="muted small task-meta">${t.songs ? `🎵 ${esc(t.songs.title)} · ` : ''}${esc(taskWho(t))}${(t.task_files || []).length ? ` · 📎 ${t.task_files.length}` : ''}</div>
         ${taskDue(t)}
       </a>
     </div>`;
@@ -1304,7 +1306,7 @@ async function viewTasks($app = APP) {
     ${done.length ? `<details class="fold" data-fold="tasksdone" ${foldOpen('tasksdone')} style="margin-top:18px"><summary class="fold-sum"><h3 style="margin:0">Fait (${done.length})</h3><span class="grow"></span>${FOLD_CHEV}</summary>${done.map(card).join('')}</details>` : ''}`;
 }
 async function viewTask(id, $app = APP) {
-  const t = await q(db.from('tasks').select('*, task_categories(name,color), task_files(*)').eq('id', id).maybeSingle());
+  const t = await q(db.from('tasks').select('*, task_categories(name,color), task_files(*), songs(id,title)').eq('id', id).maybeSingle());
   if (!t) { $app.innerHTML = `<div class="empty">Cette tâche n'existe plus.<br><br><a class="btn" href="#/taches">Retour</a></div>`; return; }
   const files = (t.task_files || []).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
   const urlOf = await signedUrls(files.map(x => x.path));
@@ -1319,6 +1321,7 @@ async function viewTask(id, $app = APP) {
     <div class="row wrap" style="gap:8px;margin-bottom:12px">${taskCat(t)}${taskDue(t)}</div>
     <div class="seg" style="margin-bottom:14px">${Object.entries(TASK_STATUS).map(([k, l]) => `<button type="button" data-act="taskstatus" data-id="${t.id}" data-s="${k}" class="${t.status === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="card">
+      ${t.songs ? `<div class="member-row"><span class="muted">Morceau</span><a href="#/morceau/${t.songs.id}" style="color:var(--accent);font-weight:600">🎵 ${esc(t.songs.title)} ›</a></div>` : ''}
       <div class="member-row"><span class="muted">Pour</span><span>${esc(taskWho(t))}</span></div>
       <div class="member-row"><span class="muted">Créée par</span><span>${esc(t.created_by || '—')}</span></div>
       ${t.status === 'done' && t.done_by ? `<div class="member-row"><span class="muted">Faite par</span><span>${esc(t.done_by)}</span></div>` : ''}
@@ -1357,15 +1360,23 @@ async function uploadTaskFiles(taskId, files) {
   return n;
 }
 async function openTaskSheet(t) {
-  const cats = await q(db.from('task_categories').select('*').order('position').order('name'));
+  const [cats, songs] = await Promise.all([
+    q(db.from('task_categories').select('*').order('position').order('name')),
+    q(db.from('songs').select('id,title').order('title')),
+  ]);
   const a = t ? t.assignees || [] : [state.me];
+  const curCat = cats.find(c => t && c.id === t.category_id);
   Sheet.open('taskForm', `
     <h2 style="margin:6px 0 12px">${t ? 'Modifier la tâche' : 'Nouvelle tâche'}</h2>
     <input type="hidden" name="id" value="${t ? esc(t.id) : ''}">
     <label style="margin-top:0">Titre</label>
     <input type="text" name="title" required maxlength="200" value="${t ? esc(t.title) : ''}" placeholder="ex. Poster le teaser sur Instagram" autocomplete="off">
     <label>Catégorie</label>
-    <select name="category"><option value="">Aucune</option>${cats.map(c => `<option value="${c.id}" ${t && t.category_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
+    <select name="category" id="taskCatSel"><option value="">Aucune</option>${cats.map(c => `<option value="${c.id}" ${isTabCat(c.name) ? 'data-tab="1"' : ''} ${t && t.category_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
+    <div id="taskSongWrap" class="${curCat && isTabCat(curCat.name) ? '' : 'hidden'}">
+      <label>Morceau</label>
+      <select name="song"><option value="">Choisir un morceau…</option>${songs.sort((x, y) => x.title.localeCompare(y.title, 'fr', { sensitivity: 'base' })).map(sg => `<option value="${sg.id}" ${t && t.song_id === sg.id ? 'selected' : ''}>${esc(sg.title)}</option>`).join('')}</select>
+    </div>
     <div class="row between" style="margin-top:12px"><label style="margin:0">Pour qui</label>
       <button type="button" class="btn-sm btn-ghost" data-act="taskall">Tout le monde</button></div>
     <div class="task-who">${state.members.map(m => `<label class="check"><input type="checkbox" name="who" value="${esc(m)}" ${a.includes(m) ? 'checked' : ''}><span>${esc(m)}${m === state.me ? ' <span class="muted small">(toi)</span>' : ''}</span></label>`).join('')}</div>
@@ -1376,6 +1387,10 @@ async function openTaskSheet(t) {
     ${t ? '' : `<label>Fichiers (facultatif) : photos, PDF ou vidéos, 50 Mo max</label><input type="file" name="files" multiple accept="image/*,application/pdf,video/*">`}`, `
     <button type="button" class="btn-ghost grow" data-act="closesheet">Annuler</button>
     <button type="submit" class="btn-accent grow">${t ? 'Enregistrer' : 'Créer'}</button>`);
+  // Le choix du morceau n'apparaît que pour la catégorie Tablature
+  document.getElementById('taskCatSel').addEventListener('change', e => {
+    document.getElementById('taskSongWrap').classList.toggle('hidden', !e.target.selectedOptions[0]?.dataset.tab);
+  });
 }
 async function openCatsSheet() {
   const cats = await q(db.from('task_categories').select('*').order('position').order('name'));
@@ -4510,7 +4525,8 @@ document.addEventListener('submit', async e => {
       const title = (d.title || '').trim();
       if (!title) { toast('Donne un titre à la tâche'); return; }
       const who = [...form.querySelectorAll('input[name=who]:checked')].map(x => x.value);
-      const row = { title, description: (d.description || '').trim() || null, category_id: d.category || null, assignees: who, due_date: d.due || null };
+      const tabCat = !!form.querySelector('#taskCatSel')?.selectedOptions[0]?.dataset.tab;
+      const row = { title, description: (d.description || '').trim() || null, category_id: d.category || null, assignees: who, due_date: d.due || null, song_id: tabCat ? d.song || null : null };
       if (d.id) {
         const before = await q(db.from('tasks').select('assignees').eq('id', d.id).maybeSingle());
         await q(db.from('tasks').update(row).eq('id', d.id));
